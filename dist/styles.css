@@ -1,0 +1,202 @@
+/*
+ * @ecodia/friend-chat unified styles. One FAB, one chat design across every
+ * Ecodia app. Consumers import '@ecodia/friend-chat/styles.css' once.
+ *
+ * Per-app customisation is CSS-variable driven: set --fc-accent (and optionally
+ * the palette vars) on any ancestor, or pass accent via the component. The FAB
+ * (black circle + cream bar + white dot) and all geometry/motion are invariant.
+ */
+
+.fc-root {
+  --fc-ink: #1a1a17;
+  --fc-paper: #ffffff;
+  --fc-cream: #f7f6f3;
+  --fc-line: rgba(26, 26, 23, 0.12);
+  --fc-muted: rgba(26, 26, 23, 0.55);
+  --fc-surface: rgba(26, 26, 23, 0.05);
+
+  /* The one constant Friend signature. */
+  --fc-tile: #000000;
+  --fc-mark-bar: #faf7f0; /* cream bar */
+  --fc-mark-dot: #ffffff; /* white dot */
+
+  /* Per-app: user bubble bg, send button, connect CTA. Defaults to ink. */
+  --fc-accent: #1a1a17;
+  --fc-on-accent: #faf7f0;
+
+  --fc-font: inherit;
+  --fc-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  font-family: var(--fc-font);
+}
+
+/* ── FAB: identical black circle + cream bar + white dot, no label ───────── */
+.fc-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: none;
+  background: var(--fc-tile);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s var(--fc-ease), box-shadow 0.2s var(--fc-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.fc-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34); }
+.fc-fab:active { transform: translateY(0); }
+
+/* ── Blurred scrim (click-to-close) ─────────────────────────────────────── */
+.fc-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ── Chat sheet ─────────────────────────────────────────────────────────── */
+.fc-sheet {
+  width: min(384px, calc(100vw - 28px));
+  height: min(560px, calc(100dvh - 108px));
+  background: var(--fc-paper);
+  border: 1px solid var(--fc-line);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24), 0 2px 8px rgba(0, 0, 0, 0.14);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--fc-ink);
+}
+
+.fc-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 12px 12px 15px;
+  background: var(--fc-tile);
+  color: var(--fc-mark-bar);
+  flex: 0 0 auto;
+}
+.fc-head-mark { display: inline-flex; }
+.fc-head-txt { display: flex; flex-direction: column; line-height: 1.15; flex: 1; min-width: 0; }
+.fc-head-name { font-weight: 600; font-size: 16px; }
+.fc-head-sub { font-weight: 500; font-size: 12px; opacity: 0.64; margin-top: 2px; }
+.fc-head-x {
+  background: none; border: none; color: var(--fc-mark-bar); opacity: 0.6;
+  min-width: 44px; min-height: 44px; margin-right: -6px;
+  font-size: 22px; line-height: 1; cursor: pointer;
+  display: grid; place-items: center; transition: opacity 0.18s;
+}
+.fc-head-x:hover { opacity: 1; }
+
+.fc-stream {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fc-empty { display: flex; flex-direction: column; gap: 16px; padding: 8px 2px; }
+.fc-empty-line { margin: 0; font-weight: 500; font-size: 15.5px; line-height: 1.5; color: var(--fc-ink); opacity: 0.85; }
+.fc-examples { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.fc-example {
+  background: var(--fc-surface);
+  border: 1px solid var(--fc-line);
+  border-radius: 999px; padding: 8px 14px;
+  font: inherit; font-weight: 500; font-size: 14px;
+  color: var(--fc-ink); cursor: pointer; text-align: left;
+  transition: background 0.18s var(--fc-ease), transform 0.18s var(--fc-ease);
+}
+.fc-example:hover { background: rgba(26, 26, 23, 0.1); transform: translateY(-1px); }
+
+.fc-you {
+  align-self: flex-end; max-width: 84%;
+  background: var(--fc-accent); color: var(--fc-on-accent);
+  padding: 10px 14px; border-radius: 16px 16px 4px 16px;
+  font-weight: 500; font-size: 15px; line-height: 1.45;
+  white-space: pre-wrap; word-wrap: break-word;
+}
+.fc-friend {
+  align-self: flex-start; max-width: 92%;
+  color: var(--fc-ink); font-size: 15px; line-height: 1.55;
+}
+.fc-friend .fc-p { margin: 0 0 10px; font-weight: 500; }
+.fc-friend .fc-p:last-child { margin-bottom: 0; }
+.fc-friend .fc-ul { margin: 0 0 10px; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.fc-friend .fc-ul li { font-weight: 500; }
+.fc-friend strong { font-weight: 700; }
+
+.fc-thinking { display: flex; gap: 5px; align-items: center; padding: 6px 2px; }
+.fc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fc-muted); animation: fcPulse 1.1s ease-in-out infinite; }
+.fc-dot:nth-child(2) { animation-delay: 0.18s; }
+.fc-dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes fcPulse { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+.fc-compose {
+  display: flex; gap: 8px; align-items: center;
+  padding: 12px; border-top: 1px solid var(--fc-line);
+  flex: 0 0 auto; background: var(--fc-paper);
+}
+.fc-input {
+  flex: 1; min-width: 0;
+  background: var(--fc-surface);
+  border: 1px solid var(--fc-line);
+  border-radius: 999px; padding: 11px 15px;
+  font: inherit; font-weight: 500; font-size: 15px;
+  color: var(--fc-ink); outline: none;
+  transition: border-color 0.2s var(--fc-ease), background 0.2s var(--fc-ease);
+}
+.fc-input::placeholder { color: var(--fc-muted); }
+.fc-input:focus { border-color: var(--fc-ink); background: var(--fc-paper); }
+.fc-input:disabled { opacity: 0.6; }
+.fc-send {
+  width: 42px; height: 42px; flex: 0 0 auto;
+  border-radius: 999px; border: none; background: var(--fc-accent); color: var(--fc-on-accent);
+  font-size: 19px; cursor: pointer; display: grid; place-items: center;
+  transition: opacity 0.18s, transform 0.18s var(--fc-ease);
+}
+.fc-send:hover:not(:disabled) { transform: translateY(-1px); }
+.fc-send:disabled { opacity: 0.34; cursor: not-allowed; }
+
+/* ── Connect-to-buy nudge card ──────────────────────────────────────────── */
+.fc-connect {
+  position: relative;
+  width: min(320px, calc(100vw - 28px));
+  background: var(--fc-paper);
+  border: 1px solid var(--fc-line);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
+  padding: 22px 22px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+  color: var(--fc-ink);
+}
+.fc-connect-x {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--fc-muted);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+.fc-connect-x:hover { color: var(--fc-ink); }
+.fc-connect-mark {
+  display: inline-grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 12px; background: var(--fc-tile);
+}
+.fc-connect-h { margin: 4px 0 0; font-weight: 600; font-size: 19px; }
+.fc-connect-p { margin: 0; font-weight: 500; font-size: 14.5px; line-height: 1.55; opacity: 0.82; }
+.fc-connect-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  margin-top: 6px; min-height: 48px; padding: 0 18px;
+  background: var(--fc-accent); color: var(--fc-on-accent); border: none; border-radius: 10px;
+  font: inherit; font-weight: 600; font-size: 15.5px; cursor: pointer;
+  transition: opacity 0.18s, transform 0.18s var(--fc-ease);
+}
+.fc-connect-cta:hover { opacity: 0.92; transform: translateY(-1px); }

@@ -1,0 +1,36 @@
+{
+  "name": "@ecodia/friend-chat",
+  "version": "1.0.0",
+  "description": "The unified Ecodia Friend floating chat: one identical FAB + one chat design across Locals, Chambers, Glovebox, Studio. Transport is injected per app.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist", "src"],
+  "sideEffects": ["*.css"],
+  "scripts": {
+    "build": "tsup"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "framer-motion": ">=10"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "esbuild": "^0.23.0",
+    "framer-motion": "^11.3.0",
+    "react": "^18.3.1",
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0"
+  },
+  "license": "UNLICENSED",
+  "author": "Ecodia"
+}
