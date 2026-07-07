@@ -97,6 +97,7 @@ function FriendChat({
   connectBody,
   accent,
   onAccent,
+  renderExtra,
   style
 }) {
   const reduce = useReducedMotion2();
@@ -139,7 +140,7 @@ function FriendChat({
         return;
       }
       if (res.friendName) setName(res.friendName);
-      setMessages((m) => [...m, { role: "friend", text: res.reply ?? "..." }]);
+      setMessages((m) => [...m, { role: "friend", text: res.reply ?? "...", extra: res.extra }]);
     } catch {
       setMessages((m) => [...m, { role: "friend", text: `I could not reach ${name} just then. Try again in a moment.` }]);
     } finally {
@@ -178,7 +179,10 @@ function FriendChat({
               examples.length > 0 && /* @__PURE__ */ jsx4("div", { className: "fc-examples", children: examples.map((ex) => /* @__PURE__ */ jsx4("button", { className: "fc-example", onClick: () => send(ex), children: ex }, ex)) })
             ] }),
             messages.map(
-              (m, i) => m.role === "you" ? /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }, i) : /* @__PURE__ */ jsx4("div", { className: "fc-friend", children: renderReply(m.text) }, i)
+              (m, i) => m.role === "you" ? /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
+                renderReply(m.text),
+                renderExtra && m.extra != null ? renderExtra(m.extra) : null
+              ] }, i)
             ),
             busy && /* @__PURE__ */ jsxs3("div", { className: "fc-friend fc-thinking", "aria-live": "polite", children: [
               /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),

@@ -40,6 +40,12 @@ interface FriendAskResult {
     friendName?: string;
     /** The reply text (markdown-ish: paragraphs, bullets, **bold**). */
     reply?: string;
+    /**
+     * Opaque per-app payload for this reply, rendered by `renderExtra` under the
+     * friend bubble. The component never inspects it. Glovebox uses it to carry
+     * web/call/map/save action pills; apps that pass no `renderExtra` ignore it.
+     */
+    extra?: unknown;
 }
 interface FriendChatProps {
     /** Room name, e.g. "Locals". Drives the subtitle "here with you in Locals". */
@@ -60,6 +66,12 @@ interface FriendChatProps {
     /** Per-app accent: sets --fc-accent (user bubble + send + CTA). */
     accent?: string;
     onAccent?: string;
+    /**
+     * Optional render-prop for the opaque `extra` a reply carries, drawn under the
+     * friend bubble (e.g. Glovebox's action pills). Only invoked when `extra` is
+     * non-null, so apps that omit it keep the plain-text reply unchanged.
+     */
+    renderExtra?: (extra: unknown) => React.ReactNode;
     /** Extra --fc-* palette overrides on the root. */
     style?: React.CSSProperties;
 }
@@ -71,7 +83,7 @@ interface FriendChatProps {
  * nudge that drives Friend subscriptions. Mount once at app scope; the app owns
  * route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, style, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, style, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
 declare function renderReply(text: string): React.ReactNode;

@@ -11,6 +11,12 @@ export interface FriendAskResult {
   friendName?: string;
   /** The reply text (markdown-ish: paragraphs, bullets, **bold**). */
   reply?: string;
+  /**
+   * Opaque per-app payload for this reply, rendered by `renderExtra` under the
+   * friend bubble. The component never inspects it. Glovebox uses it to carry
+   * web/call/map/save action pills; apps that pass no `renderExtra` ignore it.
+   */
+  extra?: unknown;
 }
 
 export interface FriendChatProps {
@@ -32,11 +38,17 @@ export interface FriendChatProps {
   /** Per-app accent: sets --fc-accent (user bubble + send + CTA). */
   accent?: string;
   onAccent?: string;
+  /**
+   * Optional render-prop for the opaque `extra` a reply carries, drawn under the
+   * friend bubble (e.g. Glovebox's action pills). Only invoked when `extra` is
+   * non-null, so apps that omit it keep the plain-text reply unchanged.
+   */
+  renderExtra?: (extra: unknown) => React.ReactNode;
   /** Extra --fc-* palette overrides on the root. */
   style?: React.CSSProperties;
 }
 
-type Msg = { role: 'you' | 'friend'; text: string };
+type Msg = { role: 'you' | 'friend'; text: string; extra?: unknown };
 
 const SPRING_PANEL = { type: 'spring' as const, stiffness: 380, damping: 34 };
 
@@ -61,6 +73,7 @@ export function FriendChat({
   connectBody,
   accent,
   onAccent,
+  renderExtra,
   style,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
@@ -111,7 +124,7 @@ export function FriendChat({
         return;
       }
       if (res.friendName) setName(res.friendName);
-      setMessages((m) => [...m, { role: 'friend', text: res.reply ?? '...' }]);
+      setMessages((m) => [...m, { role: 'friend', text: res.reply ?? '...', extra: res.extra }]);
     } catch {
       setMessages((m) => [...m, { role: 'friend', text: `I could not reach ${name} just then. Try again in a moment.` }]);
     } finally {
@@ -181,6 +194,7 @@ export function FriendChat({
                   ) : (
                     <div key={i} className="fc-friend">
                       {renderReply(m.text)}
+                      {renderExtra && m.extra != null ? renderExtra(m.extra) : null}
                     </div>
                   ),
                 )}
