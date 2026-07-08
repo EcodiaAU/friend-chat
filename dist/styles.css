@@ -83,9 +83,9 @@
   overflow: hidden;
 }
 /* Right-edge bleed: a fixed extension past the screen's right edge, colour-matched
-   to the sheet (black header band over white body) so that when the open spring
-   overshoots (panel translates a few px left), the screen edge stays covered and
-   the sheet reads as elastic-from-the-left rather than detaching from the right. */
+   to the sheet (themed accent header band over white body) so that when the open
+   spring overshoots (panel translates a few px left), the screen edge stays covered
+   and the sheet reads as elastic-from-the-left rather than detaching from the right. */
 .fc-drawer::after {
   content: '';
   position: absolute;
@@ -93,11 +93,11 @@
   bottom: 0;
   right: -120px;
   width: 120px;
-  background: linear-gradient(180deg, var(--fc-tile) 0, var(--fc-tile) 60px, var(--fc-paper) 60px);
+  background: linear-gradient(180deg, var(--fc-accent) 0, var(--fc-accent) 60px, var(--fc-paper) 60px);
   pointer-events: none;
 }
-/* The peeking bookmark / grab handle: a black tile glued to the panel's left edge,
-   protruding out past it so it is the only thing visible when collapsed. */
+/* The peeking bookmark / grab handle: the app's accent tile glued to the panel's
+   left edge, protruding out past it so it is the only thing visible when collapsed. */
 .fc-tab {
   position: absolute;
   left: -44px;
@@ -106,7 +106,7 @@
   padding: 0;
   border: none;
   border-radius: 18px 0 0 18px;
-  background: var(--fc-tile);
+  background: var(--fc-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -117,13 +117,13 @@
 }
 .fc-tab:active { cursor: grabbing; }
 
-/* ── Header (black Friend tile) ─────────────────────────────────────────── */
+/* ── Header (app-accent Friend tile) ────────────────────────────────────── */
 .fc-head {
   display: flex;
   align-items: center;
   gap: 11px;
   padding: 13px 12px 12px 15px;
-  background: var(--fc-tile);
+  background: var(--fc-accent);
   color: var(--fc-mark-bar);
   flex: 0 0 auto;
 }
@@ -227,7 +227,7 @@
 }
 .fc-connect-mark {
   display: inline-grid; place-items: center;
-  width: 44px; height: 44px; border-radius: 12px; background: var(--fc-tile);
+  width: 44px; height: 44px; border-radius: 12px; background: var(--fc-accent);
 }
 .fc-connect-h { margin: 4px 0 0; font-weight: 600; font-size: 19px; }
 .fc-connect-p { margin: 0; font-weight: 500; font-size: 14.5px; line-height: 1.55; opacity: 0.82; }
