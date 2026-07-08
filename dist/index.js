@@ -148,7 +148,7 @@ function FriendChat({
     exit: { opacity: 0 },
     transition: { duration: 0.18 }
   };
-  const markTone = { barColor: "var(--fc-mark-bar)", dotColor: "var(--fc-mark-dot)" };
+  const markTone = { barColor: "var(--fc-on-accent)", dotColor: "var(--fc-on-accent)" };
   async function send(text) {
     const msg = text.trim();
     if (!msg || busy) return;
