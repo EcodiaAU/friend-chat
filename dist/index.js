@@ -56,7 +56,7 @@ function FriendFab({
 
 // src/FriendChat.tsx
 import * as React from "react";
-import { AnimatePresence, motion as motion2, useReducedMotion as useReducedMotion2 } from "framer-motion";
+import { AnimatePresence, animate, motion as motion2, useMotionValue, useReducedMotion as useReducedMotion2 } from "framer-motion";
 
 // src/renderReply.tsx
 import { jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
@@ -83,7 +83,6 @@ function renderReply(text) {
 
 // src/FriendChat.tsx
 import { Fragment, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
-var SPRING_PANEL = { type: "spring", stiffness: 380, damping: 34 };
 function FriendChat({
   app,
   connected,
@@ -98,7 +97,8 @@ function FriendChat({
   accent,
   onAccent,
   renderExtra,
-  style
+  style,
+  tabBottom = 116
 }) {
   const reduce = useReducedMotion2();
   const [open, setOpen] = React.useState(false);
@@ -112,6 +112,30 @@ function FriendChat({
   React.useEffect(() => {
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
+  const drawerX = useMotionValue(360);
+  const [sheetW, setSheetW] = React.useState(360);
+  React.useEffect(() => {
+    const measure = () => setSheetW(Math.min(390, Math.round(window.innerWidth * 0.9)));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  React.useEffect(() => {
+    if (!open) drawerX.set(sheetW);
+  }, [sheetW, open, drawerX]);
+  const openSpring = reduce ? { duration: 0.2 } : { type: "spring", stiffness: 360, damping: 24, mass: 0.9 };
+  const shutSpring = reduce ? { duration: 0.18 } : { type: "spring", stiffness: 440, damping: 34, mass: 0.9 };
+  function openDrawer() {
+    setOpen(true);
+    animate(drawerX, 0, openSpring);
+  }
+  function closeDrawer() {
+    setOpen(false);
+    animate(drawerX, sheetW, shutSpring);
+  }
+  function toggleDrawer() {
+    drawerX.get() > sheetW / 2 ? openDrawer() : closeDrawer();
+  }
   const showConnect = !connected || degraded;
   const rootStyle = {
     ...accent ? { ["--fc-accent"]: accent } : null,
@@ -124,7 +148,6 @@ function FriendChat({
     exit: { opacity: 0 },
     transition: { duration: 0.18 }
   };
-  const panelMotion = reduce ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.18 } } : { initial: { opacity: 0, y: 40 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 40 }, transition: SPRING_PANEL };
   const markTone = { barColor: "var(--fc-mark-bar)", dotColor: "var(--fc-mark-dot)" };
   async function send(text) {
     const msg = text.trim();
@@ -136,7 +159,7 @@ function FriendChat({
       const res = await ask(msg);
       if (!res.friend_connected) {
         setDegraded(true);
-        setOpen(false);
+        closeDrawer();
         return;
       }
       if (res.friendName) setName(res.friendName);
@@ -147,77 +170,107 @@ function FriendChat({
       setBusy(false);
     }
   }
-  return /* @__PURE__ */ jsxs3(Fragment, { children: [
-    /* @__PURE__ */ jsx4(AnimatePresence, { children: open && /* @__PURE__ */ jsx4(motion2.div, { className: "fc-scrim", onClick: () => setOpen(false), ...scrimMotion }) }),
-    /* @__PURE__ */ jsxs3("div", { className: "fc-root", style: rootStyle, children: [
-      /* @__PURE__ */ jsxs3(AnimatePresence, { children: [
-        open && showConnect && /* @__PURE__ */ jsxs3(motion2.div, { className: "fc-connect", role: "dialog", "aria-label": "Connect your Friend", ...panelMotion, children: [
-          /* @__PURE__ */ jsx4("button", { className: "fc-connect-x", onClick: () => setOpen(false), "aria-label": "Close", children: "\xD7" }),
-          /* @__PURE__ */ jsx4("span", { className: "fc-connect-mark", children: /* @__PURE__ */ jsx4(FriendMark, { size: 22, ...markTone }) }),
-          /* @__PURE__ */ jsx4("h3", { className: "fc-connect-h", children: connectTitle ?? `Unlock your ${app} Friend` }),
-          /* @__PURE__ */ jsx4("p", { className: "fc-connect-p", children: connectBody ?? `Connect your Ecodia Friend and it shows up here inside ${app}: it knows you, and helps you get more out of every visit. One Friend, across everything Ecodia.` }),
-          /* @__PURE__ */ jsxs3("button", { className: "fc-connect-cta", onClick: onConnect, children: [
-            /* @__PURE__ */ jsx4(FriendMark, { size: 16, ...markTone }),
-            " Connect your Friend"
-          ] })
-        ] }, "fc-connect"),
-        open && !showConnect && /* @__PURE__ */ jsxs3(motion2.div, { className: "fc-sheet", role: "dialog", "aria-label": `${name}, here with you in ${app}`, ...panelMotion, children: [
-          /* @__PURE__ */ jsxs3("header", { className: "fc-head", children: [
-            /* @__PURE__ */ jsx4("span", { className: "fc-head-mark", children: /* @__PURE__ */ jsx4(FriendMark, { size: 20, ...markTone }) }),
-            /* @__PURE__ */ jsxs3("div", { className: "fc-head-txt", children: [
-              /* @__PURE__ */ jsx4("span", { className: "fc-head-name", children: name }),
-              /* @__PURE__ */ jsxs3("span", { className: "fc-head-sub", children: [
-                "here with you in ",
-                app
-              ] })
-            ] }),
-            /* @__PURE__ */ jsx4("button", { className: "fc-head-x", onClick: () => setOpen(false), "aria-label": "Close", children: "\xD7" })
-          ] }),
-          /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, children: [
-            messages.length === 0 && !busy && /* @__PURE__ */ jsxs3("div", { className: "fc-empty", children: [
-              /* @__PURE__ */ jsx4("p", { className: "fc-empty-line", children: emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.` }),
-              examples.length > 0 && /* @__PURE__ */ jsx4("div", { className: "fc-examples", children: examples.map((ex) => /* @__PURE__ */ jsx4("button", { className: "fc-example", onClick: () => send(ex), children: ex }, ex)) })
-            ] }),
-            messages.map(
-              (m, i) => m.role === "you" ? /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
-                renderReply(m.text),
-                renderExtra && m.extra != null ? renderExtra(m.extra) : null
-              ] }, i)
-            ),
-            busy && /* @__PURE__ */ jsxs3("div", { className: "fc-friend fc-thinking", "aria-live": "polite", children: [
-              /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
-              /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
-              /* @__PURE__ */ jsx4("span", { className: "fc-dot" })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxs3(
-            "form",
+  const headName = showConnect ? "Friend" : name;
+  const headSub = showConnect ? `in ${app}` : `here with you in ${app}`;
+  return /* @__PURE__ */ jsxs3("div", { className: "fc-root", style: rootStyle, children: [
+    /* @__PURE__ */ jsx4(AnimatePresence, { children: open && /* @__PURE__ */ jsx4(motion2.div, { className: "fc-scrim", onClick: closeDrawer, ...scrimMotion }, "fc-scrim") }),
+    /* @__PURE__ */ jsxs3(
+      motion2.div,
+      {
+        className: "fc-drawer",
+        style: { x: drawerX },
+        drag: "x",
+        dragDirectionLock: true,
+        dragConstraints: { left: 0, right: sheetW },
+        dragElastic: { top: 0, bottom: 0, left: 0.08, right: 0.16 },
+        onDragEnd: (_, info) => {
+          const goingClosed = info.velocity.x > 520 || info.velocity.x > -520 && drawerX.get() > sheetW * 0.4;
+          if (goingClosed) closeDrawer();
+          else openDrawer();
+        },
+        children: [
+          /* @__PURE__ */ jsx4(
+            "button",
             {
-              className: "fc-compose",
-              onSubmit: (e) => {
-                e.preventDefault();
-                void send(input);
-              },
-              children: [
-                /* @__PURE__ */ jsx4(
-                  "input",
-                  {
-                    className: "fc-input",
-                    value: input,
-                    onChange: (e) => setInput(e.target.value),
-                    placeholder: placeholder ?? `Ask ${name}...`,
-                    disabled: busy,
-                    autoComplete: "off"
-                  }
-                ),
-                /* @__PURE__ */ jsx4("button", { className: "fc-send", type: "submit", disabled: busy || !input.trim(), "aria-label": "Send", children: "\u2192" })
-              ]
+              className: "fc-tab",
+              style: { bottom: tabBottom },
+              onClick: toggleDrawer,
+              "aria-label": open ? "Close your Friend" : "Open your Friend",
+              children: /* @__PURE__ */ jsx4(FriendMark, { size: 24, ...markTone })
             }
-          )
-        ] }, "fc-sheet")
-      ] }),
-      /* @__PURE__ */ jsx4(FriendFab, { onClick: () => setOpen((o) => !o), ariaLabel: open ? "Close your Friend" : "Open your Friend" })
-    ] })
+          ),
+          /* @__PURE__ */ jsxs3("div", { className: "fc-drawer-inner", role: "dialog", "aria-label": headName, children: [
+            /* @__PURE__ */ jsxs3("header", { className: "fc-head", children: [
+              /* @__PURE__ */ jsx4("span", { className: "fc-head-mark", children: /* @__PURE__ */ jsx4(FriendMark, { size: 20, ...markTone }) }),
+              /* @__PURE__ */ jsxs3("div", { className: "fc-head-txt", children: [
+                /* @__PURE__ */ jsx4("span", { className: "fc-head-name", children: headName }),
+                /* @__PURE__ */ jsx4("span", { className: "fc-head-sub", children: headSub })
+              ] }),
+              !showConnect && /* @__PURE__ */ jsx4(
+                "button",
+                {
+                  className: "fc-head-friend",
+                  onClick: () => window.open("https://friend.ecodia.au", "_blank"),
+                  children: "Friend"
+                }
+              ),
+              /* @__PURE__ */ jsx4("button", { className: "fc-head-x", onClick: closeDrawer, "aria-label": "Close", children: "\xD7" })
+            ] }),
+            showConnect ? /* @__PURE__ */ jsxs3("div", { className: "fc-connect-body", children: [
+              /* @__PURE__ */ jsx4("span", { className: "fc-connect-mark", children: /* @__PURE__ */ jsx4(FriendMark, { size: 26, ...markTone }) }),
+              /* @__PURE__ */ jsx4("h3", { className: "fc-connect-h", children: connectTitle ?? `Unlock your ${app} Friend` }),
+              /* @__PURE__ */ jsx4("p", { className: "fc-connect-p", children: connectBody ?? `Connect your Ecodia Friend and it shows up here inside ${app}: it knows you, and helps you get more out of every visit. One Friend, across everything Ecodia.` }),
+              /* @__PURE__ */ jsxs3("button", { className: "fc-connect-cta", onClick: onConnect, children: [
+                /* @__PURE__ */ jsx4(FriendMark, { size: 16, ...markTone }),
+                " Connect your Friend"
+              ] })
+            ] }) : /* @__PURE__ */ jsxs3(Fragment, { children: [
+              /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, children: [
+                messages.length === 0 && !busy && /* @__PURE__ */ jsxs3("div", { className: "fc-empty", children: [
+                  /* @__PURE__ */ jsx4("p", { className: "fc-empty-line", children: emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.` }),
+                  examples.length > 0 && /* @__PURE__ */ jsx4("div", { className: "fc-examples", children: examples.map((ex) => /* @__PURE__ */ jsx4("button", { className: "fc-example", onClick: () => send(ex), children: ex }, ex)) })
+                ] }),
+                messages.map(
+                  (m, i) => m.role === "you" ? /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
+                    renderReply(m.text),
+                    renderExtra && m.extra != null ? renderExtra(m.extra) : null
+                  ] }, i)
+                ),
+                busy && /* @__PURE__ */ jsxs3("div", { className: "fc-friend fc-thinking", "aria-live": "polite", children: [
+                  /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
+                  /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
+                  /* @__PURE__ */ jsx4("span", { className: "fc-dot" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxs3(
+                "form",
+                {
+                  className: "fc-compose",
+                  onSubmit: (e) => {
+                    e.preventDefault();
+                    void send(input);
+                  },
+                  children: [
+                    /* @__PURE__ */ jsx4(
+                      "input",
+                      {
+                        className: "fc-input",
+                        value: input,
+                        onChange: (e) => setInput(e.target.value),
+                        placeholder: placeholder ?? `Ask ${name}...`,
+                        disabled: busy,
+                        autoComplete: "off"
+                      }
+                    ),
+                    /* @__PURE__ */ jsx4("button", { className: "fc-send", type: "submit", disabled: busy || !input.trim(), "aria-label": "Send", children: "\u2192" })
+                  ]
+                }
+              )
+            ] })
+          ] })
+        ]
+      }
+    )
   ] });
 }
 export {

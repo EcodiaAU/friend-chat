@@ -54,7 +54,12 @@ interface FriendChatProps {
     connected: boolean;
     /** Per-app transport. The component never knows which edge fn / backend it hits. */
     ask: (message: string) => Promise<FriendAskResult>;
-    /** Route to this app's "Connect your Friend" SSO. */
+    /**
+     * Take the person straight into this app's Friend SSO. Wire this to the native
+     * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
+     * OAuth redirect on the web) so the connect CTA opens the sign-in surface
+     * directly, never a detour through a login page.
+     */
     onConnect: () => void;
     /** Initial resolved Friend name (updated from ask responses). Default "Friend". */
     friendName?: string;
@@ -74,16 +79,22 @@ interface FriendChatProps {
     renderExtra?: (extra: unknown) => React.ReactNode;
     /** Extra --fc-* palette overrides on the root. */
     style?: React.CSSProperties;
+    /**
+     * Vertical offset (px) of the collapsed edge tab from the bottom, so it clears
+     * this app's bottom tab bar. Default 116.
+     */
+    tabBottom?: number;
 }
 /**
- * The unified Ecodia Friend floating chat. One identical FAB (black circle,
- * cream bar + white dot) and one chat design across every app; each app passes
- * only its own context via `ask`, `friendName`, room copy and `accent`. Always
- * present: connected gives the chat, not connected gives the connect-to-buy
- * nudge that drives Friend subscriptions. Mount once at app scope; the app owns
- * route-based hiding (do not render it on marketing/auth surfaces).
+ * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
+ * the right edge as a slim black tab (cream bar + white dot) and is physically
+ * pulled out into a right-anchored sheet. One identical interaction across every
+ * app; each app passes only its own context via `ask`, `friendName`, room copy and
+ * `accent`. Connected gives the chat, not-connected gives the connect-to-buy nudge
+ * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
+ * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, style, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, style, tabBottom, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
 declare function renderReply(text: string): React.ReactNode;

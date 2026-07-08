@@ -1,7 +1,6 @@
 import * as React from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { FriendMark } from './FriendMark';
-import { FriendFab } from './FriendFab';
 import { renderReply } from './renderReply';
 
 export interface FriendAskResult {
@@ -26,7 +25,12 @@ export interface FriendChatProps {
   connected: boolean;
   /** Per-app transport. The component never knows which edge fn / backend it hits. */
   ask: (message: string) => Promise<FriendAskResult>;
-  /** Route to this app's "Connect your Friend" SSO. */
+  /**
+   * Take the person straight into this app's Friend SSO. Wire this to the native
+   * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
+   * OAuth redirect on the web) so the connect CTA opens the sign-in surface
+   * directly, never a detour through a login page.
+   */
   onConnect: () => void;
   /** Initial resolved Friend name (updated from ask responses). Default "Friend". */
   friendName?: string;
@@ -46,19 +50,23 @@ export interface FriendChatProps {
   renderExtra?: (extra: unknown) => React.ReactNode;
   /** Extra --fc-* palette overrides on the root. */
   style?: React.CSSProperties;
+  /**
+   * Vertical offset (px) of the collapsed edge tab from the bottom, so it clears
+   * this app's bottom tab bar. Default 116.
+   */
+  tabBottom?: number;
 }
 
 type Msg = { role: 'you' | 'friend'; text: string; extra?: unknown };
 
-const SPRING_PANEL = { type: 'spring' as const, stiffness: 380, damping: 34 };
-
 /**
- * The unified Ecodia Friend floating chat. One identical FAB (black circle,
- * cream bar + white dot) and one chat design across every app; each app passes
- * only its own context via `ask`, `friendName`, room copy and `accent`. Always
- * present: connected gives the chat, not connected gives the connect-to-buy
- * nudge that drives Friend subscriptions. Mount once at app scope; the app owns
- * route-based hiding (do not render it on marketing/auth surfaces).
+ * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
+ * the right edge as a slim black tab (cream bar + white dot) and is physically
+ * pulled out into a right-anchored sheet. One identical interaction across every
+ * app; each app passes only its own context via `ask`, `friendName`, room copy and
+ * `accent`. Connected gives the chat, not-connected gives the connect-to-buy nudge
+ * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
+ * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
 export function FriendChat({
   app,
@@ -75,6 +83,7 @@ export function FriendChat({
   onAccent,
   renderExtra,
   style,
+  tabBottom = 116,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
   const [open, setOpen] = React.useState(false);
@@ -90,6 +99,39 @@ export function FriendChat({
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy]);
 
+  // ── Edge-drawer geometry + drag ─────────────────────────────────────────────
+  // drawerX is the live translateX of the sheet: 0 = fully open, sheetW = collapsed
+  // to just the peeking edge tab.
+  const drawerX = useMotionValue(360);
+  const [sheetW, setSheetW] = React.useState(360);
+  React.useEffect(() => {
+    const measure = () => setSheetW(Math.min(390, Math.round(window.innerWidth * 0.9)));
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  React.useEffect(() => {
+    if (!open) drawerX.set(sheetW);
+  }, [sheetW, open, drawerX]);
+
+  const openSpring = reduce
+    ? { duration: 0.2 }
+    : ({ type: 'spring', stiffness: 360, damping: 24, mass: 0.9 } as const);
+  const shutSpring = reduce
+    ? { duration: 0.18 }
+    : ({ type: 'spring', stiffness: 440, damping: 34, mass: 0.9 } as const);
+  function openDrawer() {
+    setOpen(true);
+    animate(drawerX, 0, openSpring);
+  }
+  function closeDrawer() {
+    setOpen(false);
+    animate(drawerX, sheetW, shutSpring);
+  }
+  function toggleDrawer() {
+    drawerX.get() > sheetW / 2 ? openDrawer() : closeDrawer();
+  }
+
   const showConnect = !connected || degraded;
 
   const rootStyle: React.CSSProperties = {
@@ -104,10 +146,6 @@ export function FriendChat({
     exit: { opacity: 0 },
     transition: { duration: 0.18 },
   };
-  const panelMotion = reduce
-    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.18 } }
-    : { initial: { opacity: 0, y: 40 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 40 }, transition: SPRING_PANEL };
-
   const markTone = { barColor: 'var(--fc-mark-bar)', dotColor: 'var(--fc-mark-dot)' };
 
   async function send(text: string) {
@@ -120,7 +158,7 @@ export function FriendChat({
       const res = await ask(msg);
       if (!res.friend_connected) {
         setDegraded(true);
-        setOpen(false);
+        closeDrawer();
         return;
       }
       if (res.friendName) setName(res.friendName);
@@ -132,20 +170,68 @@ export function FriendChat({
     }
   }
 
+  const headName = showConnect ? 'Friend' : name;
+  const headSub = showConnect ? `in ${app}` : `here with you in ${app}`;
+
   return (
-    <>
+    <div className="fc-root" style={rootStyle}>
       <AnimatePresence>
-        {open && <motion.div className="fc-scrim" onClick={() => setOpen(false)} {...scrimMotion} />}
+        {open && <motion.div key="fc-scrim" className="fc-scrim" onClick={closeDrawer} {...scrimMotion} />}
       </AnimatePresence>
-      <div className="fc-root" style={rootStyle}>
-        <AnimatePresence>
-          {open && showConnect && (
-            <motion.div key="fc-connect" className="fc-connect" role="dialog" aria-label="Connect your Friend" {...panelMotion}>
-              <button className="fc-connect-x" onClick={() => setOpen(false)} aria-label="Close">
-                ×
+
+      <motion.div
+        className="fc-drawer"
+        style={{ x: drawerX }}
+        drag="x"
+        dragDirectionLock
+        dragConstraints={{ left: 0, right: sheetW }}
+        // Modest left rubber-band (past fully-open) so an over-pull stays inside the
+        // right-edge bleed and never detaches; freer on the right (closing swipe).
+        dragElastic={{ top: 0, bottom: 0, left: 0.08, right: 0.16 }}
+        onDragEnd={(_, info) => {
+          const goingClosed =
+            info.velocity.x > 520 || (info.velocity.x > -520 && drawerX.get() > sheetW * 0.4);
+          if (goingClosed) closeDrawer();
+          else openDrawer();
+        }}
+      >
+        {/* Always-present edge tab: a peeking black bookmark when collapsed, the grab
+            handle on the sheet's left edge when open. Tap toggles; drag pulls. */}
+        <button
+          className="fc-tab"
+          style={{ bottom: tabBottom }}
+          onClick={toggleDrawer}
+          aria-label={open ? 'Close your Friend' : 'Open your Friend'}
+        >
+          <FriendMark size={24} {...markTone} />
+        </button>
+
+        <div className="fc-drawer-inner" role="dialog" aria-label={headName}>
+          <header className="fc-head">
+            <span className="fc-head-mark">
+              <FriendMark size={20} {...markTone} />
+            </span>
+            <div className="fc-head-txt">
+              <span className="fc-head-name">{headName}</span>
+              <span className="fc-head-sub">{headSub}</span>
+            </div>
+            {!showConnect && (
+              <button
+                className="fc-head-friend"
+                onClick={() => window.open('https://friend.ecodia.au', '_blank')}
+              >
+                Friend
               </button>
+            )}
+            <button className="fc-head-x" onClick={closeDrawer} aria-label="Close">
+              ×
+            </button>
+          </header>
+
+          {showConnect ? (
+            <div className="fc-connect-body">
               <span className="fc-connect-mark">
-                <FriendMark size={22} {...markTone} />
+                <FriendMark size={26} {...markTone} />
               </span>
               <h3 className="fc-connect-h">{connectTitle ?? `Unlock your ${app} Friend`}</h3>
               <p className="fc-connect-p">
@@ -155,22 +241,9 @@ export function FriendChat({
               <button className="fc-connect-cta" onClick={onConnect}>
                 <FriendMark size={16} {...markTone} /> Connect your Friend
               </button>
-            </motion.div>
-          )}
-          {open && !showConnect && (
-            <motion.div key="fc-sheet" className="fc-sheet" role="dialog" aria-label={`${name}, here with you in ${app}`} {...panelMotion}>
-              <header className="fc-head">
-                <span className="fc-head-mark">
-                  <FriendMark size={20} {...markTone} />
-                </span>
-                <div className="fc-head-txt">
-                  <span className="fc-head-name">{name}</span>
-                  <span className="fc-head-sub">here with you in {app}</span>
-                </div>
-                <button className="fc-head-x" onClick={() => setOpen(false)} aria-label="Close">
-                  ×
-                </button>
-              </header>
+            </div>
+          ) : (
+            <>
               <div className="fc-stream" ref={streamRef}>
                 {messages.length === 0 && !busy && (
                   <div className="fc-empty">
@@ -225,11 +298,10 @@ export function FriendChat({
                   →
                 </button>
               </form>
-            </motion.div>
+            </>
           )}
-        </AnimatePresence>
-        <FriendFab onClick={() => setOpen((o) => !o)} ariaLabel={open ? 'Close your Friend' : 'Open your Friend'} />
-      </div>
-    </>
+        </div>
+      </motion.div>
+    </div>
   );
 }
