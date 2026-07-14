@@ -54,10 +54,18 @@ interface FriendChatProps {
     connected: boolean;
     /**
      * Per-app transport. The component never knows which edge fn / backend it hits.
-     * Optional ONLY when `renderBody` supplies the whole conversation surface, in which
-     * case the built-in stream and composer never render and nothing calls it.
+     * Optional ONLY when `askStream` or `renderBody` supplies the conversation instead.
      */
     ask?: (message: string) => Promise<FriendAskResult>;
+    /**
+     * Streaming transport, used in place of `ask` when supplied. Call `onDelta` with the
+     * reply text SO FAR (cumulative, not a diff) as it arrives, and resolve with the
+     * final result. The drawer renders the bubble from the first delta, so a long turn
+     * (a Friend that is actually building something, not just answering) shows its work
+     * rather than holding a silent spinner for a minute. Apps that pass `ask` are
+     * unchanged: same drawer, same UI, one brain.
+     */
+    askStream?: (message: string, onDelta: (textSoFar: string) => void) => Promise<FriendAskResult>;
     /**
      * Take the person straight into this app's Friend SSO. Wire this to the native
      * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
@@ -99,11 +107,22 @@ interface FriendChatProps {
     headerActions?: React.ReactNode;
     /**
      * Fires whenever the drawer opens or closes. An app whose body is expensive to
-     * boot (Studio's agentic chat iframe) uses this to mount it on FIRST open rather
-     * than on every page load, and to keep it mounted afterwards so the conversation
-     * survives a collapse.
+     * boot uses this to mount it on FIRST open rather than on every page load, and to
+     * keep it mounted afterwards so the conversation survives a collapse.
      */
     onOpenChange?: (open: boolean) => void;
+    /**
+     * Open the drawer from OUTSIDE it and hand the Friend a starter message. Studio's
+     * site editor uses this: pressing "Ask <Friend>" on an element on the canvas pulls
+     * the drawer out with the question already in it. Bump `nonce` to fire again (the
+     * same text twice in a row is a legitimate second ask). autosend sends immediately;
+     * otherwise the text is placed in the composer for the person to finish.
+     */
+    seed?: {
+        text: string;
+        autosend?: boolean;
+        nonce: number;
+    } | null;
     /** Extra --fc-* palette overrides on the root. */
     style?: React.CSSProperties;
     /**
@@ -121,7 +140,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, style, tabBottom, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
 declare function renderReply(text: string): React.ReactNode;

@@ -25,10 +25,18 @@ export interface FriendChatProps {
   connected: boolean;
   /**
    * Per-app transport. The component never knows which edge fn / backend it hits.
-   * Optional ONLY when `renderBody` supplies the whole conversation surface, in which
-   * case the built-in stream and composer never render and nothing calls it.
+   * Optional ONLY when `askStream` or `renderBody` supplies the conversation instead.
    */
   ask?: (message: string) => Promise<FriendAskResult>;
+  /**
+   * Streaming transport, used in place of `ask` when supplied. Call `onDelta` with the
+   * reply text SO FAR (cumulative, not a diff) as it arrives, and resolve with the
+   * final result. The drawer renders the bubble from the first delta, so a long turn
+   * (a Friend that is actually building something, not just answering) shows its work
+   * rather than holding a silent spinner for a minute. Apps that pass `ask` are
+   * unchanged: same drawer, same UI, one brain.
+   */
+  askStream?: (message: string, onDelta: (textSoFar: string) => void) => Promise<FriendAskResult>;
   /**
    * Take the person straight into this app's Friend SSO. Wire this to the native
    * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
@@ -70,11 +78,18 @@ export interface FriendChatProps {
   headerActions?: React.ReactNode;
   /**
    * Fires whenever the drawer opens or closes. An app whose body is expensive to
-   * boot (Studio's agentic chat iframe) uses this to mount it on FIRST open rather
-   * than on every page load, and to keep it mounted afterwards so the conversation
-   * survives a collapse.
+   * boot uses this to mount it on FIRST open rather than on every page load, and to
+   * keep it mounted afterwards so the conversation survives a collapse.
    */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Open the drawer from OUTSIDE it and hand the Friend a starter message. Studio's
+   * site editor uses this: pressing "Ask <Friend>" on an element on the canvas pulls
+   * the drawer out with the question already in it. Bump `nonce` to fire again (the
+   * same text twice in a row is a legitimate second ask). autosend sends immediately;
+   * otherwise the text is placed in the composer for the person to finish.
+   */
+  seed?: { text: string; autosend?: boolean; nonce: number } | null;
   /** Extra --fc-* palette overrides on the root. */
   style?: React.CSSProperties;
   /**
@@ -99,6 +114,7 @@ export function FriendChat({
   app,
   connected,
   ask,
+  askStream,
   onConnect,
   friendName: initialName = 'Friend',
   examples = [],
@@ -112,6 +128,7 @@ export function FriendChat({
   renderBody,
   headerActions,
   onOpenChange,
+  seed,
   style,
   tabBottom = 116,
 }: FriendChatProps) {
@@ -182,12 +199,50 @@ export function FriendChat({
 
   async function send(text: string) {
     const msg = text.trim();
-    if (!msg || busy || !ask) return;
+    if (!msg || busy || (!ask && !askStream)) return;
     setInput('');
     setMessages((m) => [...m, { role: 'you', text: msg }]);
     setBusy(true);
     try {
-      const res = await ask(msg);
+      let res: FriendAskResult;
+      if (askStream) {
+        // A streaming turn: the reply bubble appears at the first token and grows,
+        // so a long turn (a Friend actually building something) shows its work
+        // instead of holding a silent spinner. The bubble is appended ONCE, on the
+        // first delta, then replaced in place.
+        let started = false;
+        res = await askStream(msg, (text) => {
+          setMessages((m) => {
+            if (!started) {
+              started = true;
+              return [...m, { role: 'friend', text }];
+            }
+            const out = m.slice();
+            const last = out[out.length - 1];
+            if (last && last.role === 'friend') out[out.length - 1] = { ...last, text };
+            return out;
+          });
+        });
+        if (!res.friend_connected) {
+          setDegraded(true);
+          closeDrawer();
+          return;
+        }
+        if (res.friendName) setName(res.friendName);
+        // Settle on the final text + any per-reply extra. A turn that streamed nothing
+        // (a tool-only turn) still lands its reply here rather than showing nothing.
+        setMessages((m) => {
+          const out = m.slice();
+          const last = out[out.length - 1];
+          const text = res.reply ?? (started && last?.role === 'friend' ? last.text : '...');
+          if (started && last && last.role === 'friend') out[out.length - 1] = { role: 'friend', text, extra: res.extra };
+          else out.push({ role: 'friend', text, extra: res.extra });
+          return out;
+        });
+        return;
+      }
+
+      res = await ask!(msg);
       if (!res.friend_connected) {
         setDegraded(true);
         closeDrawer();
@@ -201,6 +256,20 @@ export function FriendChat({
       setBusy(false);
     }
   }
+
+  // An outside surface (Studio's canvas: "Ask <Friend> about this element") pulling the
+  // drawer open with a starter message. Keyed on the nonce so the same text can be sent
+  // twice, and inert when the person has no Friend (they get the connect nudge instead).
+  const seedNonce = seed?.nonce ?? 0;
+  React.useEffect(() => {
+    if (!seedNonce) return;
+    openDrawer();
+    if (!connected) return;
+    const text = seed?.text ?? '';
+    if (seed?.autosend && text.trim()) void send(text);
+    else if (text) setInput(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedNonce]);
 
   const headName = showConnect ? 'Friend' : name;
   const headSub = showConnect ? `in ${app}` : `here with you in ${app}`;

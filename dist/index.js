@@ -87,6 +87,7 @@ function FriendChat({
   app,
   connected,
   ask,
+  askStream,
   onConnect,
   friendName: initialName = "Friend",
   examples = [],
@@ -100,6 +101,7 @@ function FriendChat({
   renderBody,
   headerActions,
   onOpenChange,
+  seed,
   style,
   tabBottom = 116
 }) {
@@ -156,12 +158,43 @@ function FriendChat({
   const markTone = { barColor: "var(--fc-on-accent)", dotColor: "var(--fc-on-accent)" };
   async function send(text) {
     const msg = text.trim();
-    if (!msg || busy || !ask) return;
+    if (!msg || busy || !ask && !askStream) return;
     setInput("");
     setMessages((m) => [...m, { role: "you", text: msg }]);
     setBusy(true);
     try {
-      const res = await ask(msg);
+      let res;
+      if (askStream) {
+        let started = false;
+        res = await askStream(msg, (text2) => {
+          setMessages((m) => {
+            if (!started) {
+              started = true;
+              return [...m, { role: "friend", text: text2 }];
+            }
+            const out = m.slice();
+            const last = out[out.length - 1];
+            if (last && last.role === "friend") out[out.length - 1] = { ...last, text: text2 };
+            return out;
+          });
+        });
+        if (!res.friend_connected) {
+          setDegraded(true);
+          closeDrawer();
+          return;
+        }
+        if (res.friendName) setName(res.friendName);
+        setMessages((m) => {
+          const out = m.slice();
+          const last = out[out.length - 1];
+          const text2 = res.reply ?? (started && last?.role === "friend" ? last.text : "...");
+          if (started && last && last.role === "friend") out[out.length - 1] = { role: "friend", text: text2, extra: res.extra };
+          else out.push({ role: "friend", text: text2, extra: res.extra });
+          return out;
+        });
+        return;
+      }
+      res = await ask(msg);
       if (!res.friend_connected) {
         setDegraded(true);
         closeDrawer();
@@ -175,6 +208,15 @@ function FriendChat({
       setBusy(false);
     }
   }
+  const seedNonce = seed?.nonce ?? 0;
+  React.useEffect(() => {
+    if (!seedNonce) return;
+    openDrawer();
+    if (!connected) return;
+    const text = seed?.text ?? "";
+    if (seed?.autosend && text.trim()) void send(text);
+    else if (text) setInput(text);
+  }, [seedNonce]);
   const headName = showConnect ? "Friend" : name;
   const headSub = showConnect ? `in ${app}` : `here with you in ${app}`;
   return /* @__PURE__ */ jsxs3("div", { className: "fc-root", style: rootStyle, children: [
