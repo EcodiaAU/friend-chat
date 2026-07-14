@@ -97,6 +97,8 @@ function FriendChat({
   accent,
   onAccent,
   renderExtra,
+  renderBody,
+  headerActions,
   style,
   tabBottom = 116
 }) {
@@ -151,7 +153,7 @@ function FriendChat({
   const markTone = { barColor: "var(--fc-on-accent)", dotColor: "var(--fc-on-accent)" };
   async function send(text) {
     const msg = text.trim();
-    if (!msg || busy) return;
+    if (!msg || busy || !ask) return;
     setInput("");
     setMessages((m) => [...m, { role: "you", text: msg }]);
     setBusy(true);
@@ -206,14 +208,14 @@ function FriendChat({
                 /* @__PURE__ */ jsx4("span", { className: "fc-head-name", children: headName }),
                 /* @__PURE__ */ jsx4("span", { className: "fc-head-sub", children: headSub })
               ] }),
-              !showConnect && /* @__PURE__ */ jsx4(
+              !showConnect && (headerActions ?? /* @__PURE__ */ jsx4(
                 "button",
                 {
                   className: "fc-head-friend",
                   onClick: () => window.open("https://friend.ecodia.au", "_blank"),
                   children: "Friend"
                 }
-              ),
+              )),
               /* @__PURE__ */ jsx4("button", { className: "fc-head-x", onClick: closeDrawer, "aria-label": "Close", children: "\xD7" })
             ] }),
             showConnect ? /* @__PURE__ */ jsxs3("div", { className: "fc-connect-body", children: [
@@ -224,7 +226,12 @@ function FriendChat({
                 /* @__PURE__ */ jsx4(FriendMark, { size: 16, ...markTone }),
                 " Connect your Friend"
               ] })
-            ] }) : /* @__PURE__ */ jsxs3(Fragment, { children: [
+            ] }) : renderBody ? (
+              // The app brought its own conversation surface (Studio's agentic chat).
+              // The drawer chrome above and around it is unchanged, so it is still the
+              // one federated Friend drawer.
+              /* @__PURE__ */ jsx4("div", { className: "fc-body", children: renderBody() })
+            ) : /* @__PURE__ */ jsxs3(Fragment, { children: [
               /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, children: [
                 messages.length === 0 && !busy && /* @__PURE__ */ jsxs3("div", { className: "fc-empty", children: [
                   /* @__PURE__ */ jsx4("p", { className: "fc-empty-line", children: emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.` }),

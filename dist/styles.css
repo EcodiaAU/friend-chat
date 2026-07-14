@@ -153,6 +153,15 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* The app-supplied conversation surface (FriendChat renderBody), filling the sheet
+   under the header. It owns its own scrolling; we only give it the box. */
+.fc-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  background: var(--fc-paper);
+}
+
 .fc-empty { display: flex; flex-direction: column; gap: 16px; padding: 8px 2px; }
 .fc-empty-line { margin: 0; font-weight: 500; font-size: 15.5px; line-height: 1.5; color: var(--fc-ink); opacity: 0.85; }
 .fc-examples { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }

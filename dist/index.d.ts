@@ -52,8 +52,12 @@ interface FriendChatProps {
     app: string;
     /** Whether the person has connected their Friend. false shows the connect-to-buy nudge. */
     connected: boolean;
-    /** Per-app transport. The component never knows which edge fn / backend it hits. */
-    ask: (message: string) => Promise<FriendAskResult>;
+    /**
+     * Per-app transport. The component never knows which edge fn / backend it hits.
+     * Optional ONLY when `renderBody` supplies the whole conversation surface, in which
+     * case the built-in stream and composer never render and nothing calls it.
+     */
+    ask?: (message: string) => Promise<FriendAskResult>;
     /**
      * Take the person straight into this app's Friend SSO. Wire this to the native
      * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
@@ -77,6 +81,22 @@ interface FriendChatProps {
      * non-null, so apps that omit it keep the plain-text reply unchanged.
      */
     renderExtra?: (extra: unknown) => React.ReactNode;
+    /**
+     * Optional replacement for the whole connected conversation surface (the stream +
+     * composer). The drawer chrome stays identical (edge tab, drag, scrim, header, and
+     * the not-connected nudge), so an app with its OWN chat body still reads and behaves
+     * as the one federated Friend drawer. Studio uses this to host its agentic chat
+     * (streaming, tools, artifacts) inside the shared drawer instead of the plain
+     * ask/reply panel. Rendered in a flex-filling, min-height-0 box; own your scrolling.
+     * Apps that omit it keep the built-in stream + composer unchanged.
+     */
+    renderBody?: () => React.ReactNode;
+    /**
+     * Optional controls rendered in the header, left of the close button (in place of
+     * the default "Friend" link out to friend.ecodia.au). Style them against
+     * --fc-on-accent so they read on the accent tile.
+     */
+    headerActions?: React.ReactNode;
     /** Extra --fc-* palette overrides on the root. */
     style?: React.CSSProperties;
     /**
@@ -94,7 +114,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, style, tabBottom, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, style, tabBottom, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
 declare function renderReply(text: string): React.ReactNode;
