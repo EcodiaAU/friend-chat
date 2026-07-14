@@ -97,6 +97,13 @@ interface FriendChatProps {
      * --fc-on-accent so they read on the accent tile.
      */
     headerActions?: React.ReactNode;
+    /**
+     * Fires whenever the drawer opens or closes. An app whose body is expensive to
+     * boot (Studio's agentic chat iframe) uses this to mount it on FIRST open rather
+     * than on every page load, and to keep it mounted afterwards so the conversation
+     * survives a collapse.
+     */
+    onOpenChange?: (open: boolean) => void;
     /** Extra --fc-* palette overrides on the root. */
     style?: React.CSSProperties;
     /**
@@ -114,7 +121,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, style, tabBottom, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, style, tabBottom, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
 declare function renderReply(text: string): React.ReactNode;

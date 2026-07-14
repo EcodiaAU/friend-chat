@@ -68,6 +68,13 @@ export interface FriendChatProps {
    * --fc-on-accent so they read on the accent tile.
    */
   headerActions?: React.ReactNode;
+  /**
+   * Fires whenever the drawer opens or closes. An app whose body is expensive to
+   * boot (Studio's agentic chat iframe) uses this to mount it on FIRST open rather
+   * than on every page load, and to keep it mounted afterwards so the conversation
+   * survives a collapse.
+   */
+  onOpenChange?: (open: boolean) => void;
   /** Extra --fc-* palette overrides on the root. */
   style?: React.CSSProperties;
   /**
@@ -104,6 +111,7 @@ export function FriendChat({
   renderExtra,
   renderBody,
   headerActions,
+  onOpenChange,
   style,
   tabBottom = 116,
 }: FriendChatProps) {
@@ -144,10 +152,12 @@ export function FriendChat({
     : ({ type: 'spring', stiffness: 440, damping: 34, mass: 0.9 } as const);
   function openDrawer() {
     setOpen(true);
+    onOpenChange?.(true);
     animate(drawerX, 0, openSpring);
   }
   function closeDrawer() {
     setOpen(false);
+    onOpenChange?.(false);
     animate(drawerX, sheetW, shutSpring);
   }
   function toggleDrawer() {

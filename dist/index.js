@@ -99,6 +99,7 @@ function FriendChat({
   renderExtra,
   renderBody,
   headerActions,
+  onOpenChange,
   style,
   tabBottom = 116
 }) {
@@ -129,10 +130,12 @@ function FriendChat({
   const shutSpring = reduce ? { duration: 0.18 } : { type: "spring", stiffness: 440, damping: 34, mass: 0.9 };
   function openDrawer() {
     setOpen(true);
+    onOpenChange?.(true);
     animate(drawerX, 0, openSpring);
   }
   function closeDrawer() {
     setOpen(false);
+    onOpenChange?.(false);
     animate(drawerX, sheetW, shutSpring);
   }
   function toggleDrawer() {
