@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'framer-motion';
 import { FriendMark } from './FriendMark';
 import { renderReply } from './renderReply';
 
@@ -133,6 +133,7 @@ export function FriendChat({
   tabBottom = 116,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
+  const dragControls = useDragControls();
   const [open, setOpen] = React.useState(false);
   const [messages, setMessages] = React.useState<Msg[]>([]);
   const [input, setInput] = React.useState('');
@@ -284,6 +285,11 @@ export function FriendChat({
         className="fc-drawer"
         style={{ x: drawerX }}
         drag="x"
+        // Drag starts ONLY from the edge tab (dragControls), never from a press inside
+        // the panel: a person must be able to select and copy the Friend's replies, and
+        // a whole-panel drag listener eats the selection gesture (Tate 2026-07-16).
+        dragListener={false}
+        dragControls={dragControls}
         dragDirectionLock
         dragConstraints={{ left: 0, right: sheetW }}
         // Modest left rubber-band (past fully-open) so an over-pull stays inside the
@@ -302,6 +308,7 @@ export function FriendChat({
           className="fc-tab"
           style={{ bottom: tabBottom }}
           onClick={toggleDrawer}
+          onPointerDown={(e) => dragControls.start(e)}
           aria-label={open ? 'Close your Friend' : 'Open your Friend'}
         >
           <FriendMark size={24} {...markTone} />

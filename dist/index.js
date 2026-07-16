@@ -56,7 +56,7 @@ function FriendFab({
 
 // src/FriendChat.tsx
 import * as React from "react";
-import { AnimatePresence, animate, motion as motion2, useMotionValue, useReducedMotion as useReducedMotion2 } from "framer-motion";
+import { AnimatePresence, animate, motion as motion2, useDragControls, useMotionValue, useReducedMotion as useReducedMotion2 } from "framer-motion";
 
 // src/renderReply.tsx
 import { jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
@@ -106,6 +106,7 @@ function FriendChat({
   tabBottom = 116
 }) {
   const reduce = useReducedMotion2();
+  const dragControls = useDragControls();
   const [open, setOpen] = React.useState(false);
   const [messages, setMessages] = React.useState([]);
   const [input, setInput] = React.useState("");
@@ -227,6 +228,8 @@ function FriendChat({
         className: "fc-drawer",
         style: { x: drawerX },
         drag: "x",
+        dragListener: false,
+        dragControls,
         dragDirectionLock: true,
         dragConstraints: { left: 0, right: sheetW },
         dragElastic: { top: 0, bottom: 0, left: 0.08, right: 0.16 },
@@ -242,6 +245,7 @@ function FriendChat({
               className: "fc-tab",
               style: { bottom: tabBottom },
               onClick: toggleDrawer,
+              onPointerDown: (e) => dragControls.start(e),
               "aria-label": open ? "Close your Friend" : "Open your Friend",
               children: /* @__PURE__ */ jsx4(FriendMark, { size: 24, ...markTone })
             }

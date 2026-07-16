@@ -81,6 +81,16 @@
   border-radius: 20px 0 0 20px;
   box-shadow: -22px 0 60px rgba(0, 0, 0, 0.30), -2px 0 10px rgba(0, 0, 0, 0.14);
   overflow: hidden;
+  /* Replies must be selectable/copyable: drag lives on the edge tab only, and this
+     wins over any app-level user-select: none (Tate 2026-07-16). */
+  user-select: text;
+  -webkit-user-select: text;
+}
+.fc-tab,
+.fc-head,
+.fc-compose {
+  user-select: none;
+  -webkit-user-select: none;
 }
 /* Right-edge bleed: a fixed extension past the screen's right edge, colour-matched
    to the sheet (themed accent header band over white body) so that when the open
