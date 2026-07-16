@@ -65,7 +65,7 @@ interface FriendChatProps {
      * rather than holding a silent spinner for a minute. Apps that pass `ask` are
      * unchanged: same drawer, same UI, one brain.
      */
-    askStream?: (message: string, onDelta: (textSoFar: string) => void) => Promise<FriendAskResult>;
+    askStream?: (message: string, onDelta: (textSoFar: string) => void, signal?: AbortSignal) => Promise<FriendAskResult>;
     /**
      * Take the person straight into this app's Friend SSO. Wire this to the native
      * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web

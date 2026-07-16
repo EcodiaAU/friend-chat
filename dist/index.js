@@ -111,6 +111,12 @@ function FriendChat({
   const [messages, setMessages] = React.useState([]);
   const [input, setInput] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const abortRef = React.useRef(null);
+  const [stopping, setStopping] = React.useState(false);
+  function stop() {
+    setStopping(true);
+    abortRef.current?.abort();
+  }
   const [name, setName] = React.useState(initialName);
   const [degraded, setDegraded] = React.useState(false);
   const streamRef = React.useRef(null);
@@ -163,11 +169,15 @@ function FriendChat({
     setInput("");
     setMessages((m) => [...m, { role: "you", text: msg }]);
     setBusy(true);
+    setStopping(false);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       let res;
       if (askStream) {
         let started = false;
         res = await askStream(msg, (text2) => {
+          if (ctrl.signal.aborted) return;
           setMessages((m) => {
             if (!started) {
               started = true;
@@ -203,10 +213,21 @@ function FriendChat({
       }
       if (res.friendName) setName(res.friendName);
       setMessages((m) => [...m, { role: "friend", text: res.reply ?? "...", extra: res.extra }]);
-    } catch {
-      setMessages((m) => [...m, { role: "friend", text: `I could not reach ${name} just then. Try again in a moment.` }]);
+    } catch (err) {
+      const aborted = ctrl.signal.aborted || err instanceof DOMException && err.name === "AbortError";
+      if (aborted) {
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          if (last && last.role === "friend") return m;
+          return [...m, { role: "friend", text: "Stopped." }];
+        });
+      } else {
+        setMessages((m) => [...m, { role: "friend", text: `I could not reach ${name} just then. Try again in a moment.` }]);
+      }
     } finally {
       setBusy(false);
+      setStopping(false);
+      abortRef.current = null;
     }
   }
   const seedNonce = seed?.nonce ?? 0;
@@ -318,7 +339,7 @@ function FriendChat({
                         autoComplete: "off"
                       }
                     ),
-                    /* @__PURE__ */ jsx4("button", { className: "fc-send", type: "submit", disabled: busy || !input.trim(), "aria-label": "Send", children: "\u2192" })
+                    busy ? /* @__PURE__ */ jsx4("button", { className: "fc-send fc-stop", type: "button", onClick: stop, disabled: stopping, "aria-label": "Stop", title: "Stop", children: /* @__PURE__ */ jsx4("span", { className: "fc-stop-sq", "aria-hidden": true }) }) : /* @__PURE__ */ jsx4("button", { className: "fc-send", type: "submit", disabled: !input.trim(), "aria-label": "Send", children: "\u2192" })
                   ]
                 }
               )

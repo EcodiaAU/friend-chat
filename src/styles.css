@@ -247,6 +247,11 @@
 .fc-send:hover:not(:disabled) { transform: translateY(-1px); }
 .fc-send:disabled { opacity: 0.34; cursor: not-allowed; }
 
+.fc-stop { background: var(--fc-accent, #2b2722); }
+.fc-stop-sq { display: block; width: 11px; height: 11px; border-radius: 2px; background: var(--fc-on-accent, #fff); }
+.fc-stop:hover:not(:disabled) { filter: brightness(1.08); }
+
+
 /* ── Connect-to-buy nudge (fills the drawer body when not connected) ─────── */
 .fc-connect-body {
   flex: 1;

@@ -36,7 +36,7 @@ export interface FriendChatProps {
    * rather than holding a silent spinner for a minute. Apps that pass `ask` are
    * unchanged: same drawer, same UI, one brain.
    */
-  askStream?: (message: string, onDelta: (textSoFar: string) => void) => Promise<FriendAskResult>;
+  askStream?: (message: string, onDelta: (textSoFar: string) => void, signal?: AbortSignal) => Promise<FriendAskResult>;
   /**
    * Take the person straight into this app's Friend SSO. Wire this to the native
    * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
@@ -138,6 +138,15 @@ export function FriendChat({
   const [messages, setMessages] = React.useState<Msg[]>([]);
   const [input, setInput] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  // Lets the person STOP a turn mid-flight: while busy the send button becomes a
+  // stop button, and clicking it aborts the in-flight askStream (its fetch reader
+  // rejects, caught below). One controller per turn.
+  const abortRef = React.useRef<AbortController | null>(null);
+  const [stopping, setStopping] = React.useState(false);
+  function stop() {
+    setStopping(true);
+    abortRef.current?.abort();
+  }
   const [name, setName] = React.useState(initialName);
   const [degraded, setDegraded] = React.useState(false);
   const streamRef = React.useRef<HTMLDivElement>(null);
@@ -204,6 +213,9 @@ export function FriendChat({
     setInput('');
     setMessages((m) => [...m, { role: 'you', text: msg }]);
     setBusy(true);
+    setStopping(false);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       let res: FriendAskResult;
       if (askStream) {
@@ -213,6 +225,7 @@ export function FriendChat({
         // first delta, then replaced in place.
         let started = false;
         res = await askStream(msg, (text) => {
+          if (ctrl.signal.aborted) return;
           setMessages((m) => {
             if (!started) {
               started = true;
@@ -251,10 +264,23 @@ export function FriendChat({
       }
       if (res.friendName) setName(res.friendName);
       setMessages((m) => [...m, { role: 'friend', text: res.reply ?? '...', extra: res.extra }]);
-    } catch {
-      setMessages((m) => [...m, { role: 'friend', text: `I could not reach ${name} just then. Try again in a moment.` }]);
+    } catch (err) {
+      const aborted = ctrl.signal.aborted || (err instanceof DOMException && err.name === 'AbortError');
+      if (aborted) {
+        // The person stopped it. Keep whatever streamed so far; add a quiet marker
+        // only if nothing had started.
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          if (last && last.role === 'friend') return m;
+          return [...m, { role: 'friend', text: 'Stopped.' }];
+        });
+      } else {
+        setMessages((m) => [...m, { role: 'friend', text: `I could not reach ${name} just then. Try again in a moment.` }]);
+      }
     } finally {
       setBusy(false);
+      setStopping(false);
+      abortRef.current = null;
     }
   }
 
@@ -408,9 +434,15 @@ export function FriendChat({
                   disabled={busy}
                   autoComplete="off"
                 />
-                <button className="fc-send" type="submit" disabled={busy || !input.trim()} aria-label="Send">
-                  →
-                </button>
+                {busy ? (
+                  <button className="fc-send fc-stop" type="button" onClick={stop} disabled={stopping} aria-label="Stop" title="Stop">
+                    <span className="fc-stop-sq" aria-hidden />
+                  </button>
+                ) : (
+                  <button className="fc-send" type="submit" disabled={!input.trim()} aria-label="Send">
+                    →
+                  </button>
+                )}
               </form>
             </>
           )}
