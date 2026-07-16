@@ -51,7 +51,9 @@
 .fc-scrim {
   position: fixed;
   inset: 0;
-  z-index: 65;
+  /* Themable stacking: apps with their own overlay ladders set --fc-z on the root
+     (e.g. Adventure sits the drawer under its trip modal). Scrim rides 5 below. */
+  z-index: calc(var(--fc-z, 70) - 5);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -66,7 +68,7 @@
   bottom: max(env(safe-area-inset-bottom, 0px), 10px);
   right: 0;
   width: min(390px, 90vw);
-  z-index: 70;
+  z-index: var(--fc-z, 70);
   overflow: visible;
   touch-action: pan-y;
   will-change: transform;
