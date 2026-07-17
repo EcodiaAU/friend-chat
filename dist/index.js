@@ -55,34 +55,104 @@ function FriendFab({
 }
 
 // src/FriendChat.tsx
-import * as React from "react";
+import * as React2 from "react";
 import { AnimatePresence, animate, motion as motion2, useDragControls, useMotionValue, useReducedMotion as useReducedMotion2 } from "framer-motion";
 
 // src/renderReply.tsx
+import * as React from "react";
 import { jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
-function inline(s) {
-  const parts = s.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map(
-    (p, i) => /^\*\*[^*]+\*\*$/.test(p) ? /* @__PURE__ */ jsx3("strong", { children: p.slice(2, -2) }, i) : /* @__PURE__ */ jsx3("span", { children: p }, i)
-  );
+var URL_CORE = `https?:\\/\\/[^\\s<>()\\[\\]]+[^\\s<>()\\[\\].,;:!?'"]`;
+var IMG_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)(\?[^\s]*)?$/i;
+function isImageUrl(u) {
+  return IMG_EXT.test(u) || /\/storage\/v1\/object\/(public|sign)\//.test(u) || /\/_next\/image\?/.test(u);
 }
+function labelForUrl(u) {
+  try {
+    const url = new URL(u);
+    const last = url.pathname.split("/").filter(Boolean).pop();
+    if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
+    return url.hostname.replace(/^www\./, "") + (url.pathname !== "/" ? url.pathname : "");
+  } catch {
+    return "link";
+  }
+}
+function imageNode(url, alt, key) {
+  return /* @__PURE__ */ jsxs2("a", { className: "fc-imglink", href: url, target: "_blank", rel: "noopener noreferrer", title: alt || "Open image", children: [
+    /* @__PURE__ */ jsx3("img", { className: "fc-img", src: url, alt: alt || "image", loading: "lazy" }),
+    alt ? /* @__PURE__ */ jsx3("span", { className: "fc-imgcap", children: alt }) : null
+  ] }, key);
+}
+function linkNode(url, text, key) {
+  return /* @__PURE__ */ jsx3("a", { className: "fc-link", href: url, target: "_blank", rel: "noopener noreferrer", children: text }, key);
+}
+var INLINE_RE = new RegExp(
+  [
+    "!\\[([^\\]]*)\\]\\((" + URL_CORE + ")\\)",
+    // 1 alt, 2 url   -> ![alt](url)
+    "\\[([^\\]]+)\\]\\((" + URL_CORE + ")\\)",
+    // 3 text, 4 url  -> [text](url)
+    "`([^`]+)`",
+    // 5 code
+    "\\*\\*([^*]+)\\*\\*",
+    // 6 bold
+    "\\*([^*]+)\\*",
+    // 7 italic
+    "(" + URL_CORE + ")"
+    // 8 bare url
+  ].join("|"),
+  "g"
+);
+function inline(s, keyPrefix) {
+  const out = [];
+  let last = 0;
+  let m;
+  INLINE_RE.lastIndex = 0;
+  let n = 0;
+  while ((m = INLINE_RE.exec(s)) !== null) {
+    if (m.index > last) out.push(/* @__PURE__ */ jsx3(React.Fragment, { children: s.slice(last, m.index) }, `${keyPrefix}t${n}`));
+    const k = `${keyPrefix}n${n}`;
+    if (m[1] !== void 0 && m[2]) out.push(imageNode(m[2], m[1], k));
+    else if (m[3] !== void 0 && m[4]) {
+      out.push(linkNode(m[4], /^https?:\/\//.test(m[3]) ? labelForUrl(m[4]) : m[3], k));
+    } else if (m[5] !== void 0) out.push(/* @__PURE__ */ jsx3("code", { className: "fc-code", children: m[5] }, k));
+    else if (m[6] !== void 0) out.push(/* @__PURE__ */ jsx3("strong", { children: m[6] }, k));
+    else if (m[7] !== void 0) out.push(/* @__PURE__ */ jsx3("em", { children: m[7] }, k));
+    else if (m[8]) out.push(isImageUrl(m[8]) ? imageNode(m[8], "", k) : linkNode(m[8], labelForUrl(m[8]), k));
+    last = m.index + m[0].length;
+    n += 1;
+  }
+  if (last < s.length) out.push(/* @__PURE__ */ jsx3(React.Fragment, { children: s.slice(last) }, `${keyPrefix}t${n}`));
+  return out;
+}
+var UL_RE = /^\s*[-*•]\s+/;
+var OL_RE = /^\s*\d+[.)]\s+/;
+var H_RE = /^\s*(#{1,3})\s+(.*)$/;
 function renderReply(text) {
-  const blocks = text.split(/\n{2,}/);
+  const blocks = (text ?? "").split(/\n{2,}/);
   return blocks.map((block, bi) => {
-    const lines = block.split(/\n/);
-    const isList = lines.length > 0 && lines.every((l) => /^\s*[-*•]\s+/.test(l));
-    if (isList) {
-      return /* @__PURE__ */ jsx3("ul", { className: "fc-ul", children: lines.map((l, li) => /* @__PURE__ */ jsx3("li", { children: inline(l.replace(/^\s*[-*•]\s+/, "")) }, li)) }, bi);
+    const lines = block.split(/\n/).filter((l, i, a) => l.trim() !== "" || i > 0 && i < a.length - 1);
+    if (!lines.length) return null;
+    const h = lines.length === 1 ? lines[0].match(H_RE) : null;
+    if (h) {
+      const level = h[1].length;
+      const cls = `fc-h fc-h${level}`;
+      return level === 1 ? /* @__PURE__ */ jsx3("h4", { className: cls, children: inline(h[2], `${bi}-`) }, bi) : level === 2 ? /* @__PURE__ */ jsx3("h5", { className: cls, children: inline(h[2], `${bi}-`) }, bi) : /* @__PURE__ */ jsx3("h6", { className: cls, children: inline(h[2], `${bi}-`) }, bi);
+    }
+    if (lines.every((l) => UL_RE.test(l))) {
+      return /* @__PURE__ */ jsx3("ul", { className: "fc-ul", children: lines.map((l, li) => /* @__PURE__ */ jsx3("li", { children: inline(l.replace(UL_RE, ""), `${bi}-${li}-`) }, li)) }, bi);
+    }
+    if (lines.every((l) => OL_RE.test(l))) {
+      return /* @__PURE__ */ jsx3("ol", { className: "fc-ol", children: lines.map((l, li) => /* @__PURE__ */ jsx3("li", { children: inline(l.replace(OL_RE, ""), `${bi}-${li}-`) }, li)) }, bi);
     }
     return /* @__PURE__ */ jsx3("p", { className: "fc-p", children: lines.map((l, li) => /* @__PURE__ */ jsxs2("span", { children: [
-      inline(l),
+      inline(l, `${bi}-${li}-`),
       li < lines.length - 1 ? /* @__PURE__ */ jsx3("br", {}) : null
     ] }, li)) }, bi);
   });
 }
 
 // src/FriendChat.tsx
-import { Fragment, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
 function FriendChat({
   app,
   connected,
@@ -107,32 +177,32 @@ function FriendChat({
 }) {
   const reduce = useReducedMotion2();
   const dragControls = useDragControls();
-  const [open, setOpen] = React.useState(false);
-  const [messages, setMessages] = React.useState([]);
-  const [input, setInput] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const abortRef = React.useRef(null);
-  const [stopping, setStopping] = React.useState(false);
+  const [open, setOpen] = React2.useState(false);
+  const [messages, setMessages] = React2.useState([]);
+  const [input, setInput] = React2.useState("");
+  const [busy, setBusy] = React2.useState(false);
+  const abortRef = React2.useRef(null);
+  const [stopping, setStopping] = React2.useState(false);
   function stop() {
     setStopping(true);
     abortRef.current?.abort();
   }
-  const [name, setName] = React.useState(initialName);
-  const [degraded, setDegraded] = React.useState(false);
-  const streamRef = React.useRef(null);
-  React.useEffect(() => setName(initialName), [initialName]);
-  React.useEffect(() => {
+  const [name, setName] = React2.useState(initialName);
+  const [degraded, setDegraded] = React2.useState(false);
+  const streamRef = React2.useRef(null);
+  React2.useEffect(() => setName(initialName), [initialName]);
+  React2.useEffect(() => {
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
   const drawerX = useMotionValue(360);
-  const [sheetW, setSheetW] = React.useState(360);
-  React.useEffect(() => {
+  const [sheetW, setSheetW] = React2.useState(360);
+  React2.useEffect(() => {
     const measure = () => setSheetW(Math.min(390, Math.round(window.innerWidth * 0.9)));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  React.useEffect(() => {
+  React2.useEffect(() => {
     if (!open) drawerX.set(sheetW);
   }, [sheetW, open, drawerX]);
   const openSpring = reduce ? { duration: 0.2 } : { type: "spring", stiffness: 360, damping: 24, mass: 0.9 };
@@ -231,7 +301,7 @@ function FriendChat({
     }
   }
   const seedNonce = seed?.nonce ?? 0;
-  React.useEffect(() => {
+  React2.useEffect(() => {
     if (!seedNonce) return;
     openDrawer();
     if (!connected) return;
@@ -301,7 +371,7 @@ function FriendChat({
               // The drawer chrome above and around it is unchanged, so it is still the
               // one federated Friend drawer.
               /* @__PURE__ */ jsx4("div", { className: "fc-body", children: renderBody() })
-            ) : /* @__PURE__ */ jsxs3(Fragment, { children: [
+            ) : /* @__PURE__ */ jsxs3(Fragment2, { children: [
               /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, children: [
                 messages.length === 0 && !busy && /* @__PURE__ */ jsxs3("div", { className: "fc-empty", children: [
                   /* @__PURE__ */ jsx4("p", { className: "fc-empty-line", children: emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.` }),

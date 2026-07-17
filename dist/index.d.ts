@@ -142,7 +142,7 @@ interface FriendChatProps {
  */
 declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, }: FriendChatProps): React.JSX.Element;
 
-/** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
+/** Minimal, dependency-free rendering of a Friend reply. */
 declare function renderReply(text: string): React.ReactNode;
 
 export { type FriendAskResult, FriendChat, type FriendChatProps, FriendFab, FriendMark, renderReply };

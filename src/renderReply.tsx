@@ -1,33 +1,135 @@
 import * as React from 'react';
 
-/** Inline **bold** rendering. */
-function inline(s: string): React.ReactNode {
-  const parts = s.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
-    /^\*\*[^*]+\*\*$/.test(p) ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>,
+/**
+ * Minimal, dependency-free rendering of a Friend reply so the chat reads clearly for
+ * anyone: paragraphs, ordered + unordered lists, small headings, and inline
+ * **bold** / *italic* / `code` / [links](url) / ![images](url).
+ *
+ * The load-bearing rule: a RAW URL never appears as text. A bare link becomes a
+ * clickable label; a bare image URL becomes a thumbnail preview. So even when the
+ * Friend pastes a raw URL, the person sees a tidy link or a picture, never a wall of
+ * https://... . (Origin 2026-07-17: the image-library answer dumped a raw Supabase
+ * URL and the filename with no preview and no clickable library link.)
+ */
+
+const URL_CORE = 'https?:\\/\\/[^\\s<>()\\[\\]]+[^\\s<>()\\[\\].,;:!?\'"]';
+const IMG_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)(\?[^\s]*)?$/i;
+
+/** A URL that points at an image: by extension, or a known asset-store path. */
+function isImageUrl(u: string): boolean {
+  return IMG_EXT.test(u) || /\/storage\/v1\/object\/(public|sign)\//.test(u) || /\/_next\/image\?/.test(u);
+}
+
+/** A human label for a bare URL: the file name if it has one, else the host. */
+function labelForUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    const last = url.pathname.split('/').filter(Boolean).pop();
+    if (last && /\.[a-z0-9]{2,5}$/i.test(last)) return decodeURIComponent(last);
+    return url.hostname.replace(/^www\./, '') + (url.pathname !== '/' ? url.pathname : '');
+  } catch {
+    return 'link';
+  }
+}
+
+function imageNode(url: string, alt: string, key: React.Key): React.ReactNode {
+  return (
+    <a key={key} className="fc-imglink" href={url} target="_blank" rel="noopener noreferrer" title={alt || 'Open image'}>
+      <img className="fc-img" src={url} alt={alt || 'image'} loading="lazy" />
+      {alt ? <span className="fc-imgcap">{alt}</span> : null}
+    </a>
   );
 }
 
-/** Minimal, dependency-free rendering of a Friend reply: paragraphs, bullets, bold. */
+function linkNode(url: string, text: string, key: React.Key): React.ReactNode {
+  return (
+    <a key={key} className="fc-link" href={url} target="_blank" rel="noopener noreferrer">
+      {text}
+    </a>
+  );
+}
+
+// One pass over a line, in priority order: image, link, code, bold, italic, bare URL.
+const INLINE_RE = new RegExp(
+  [
+    '!\\[([^\\]]*)\\]\\((' + URL_CORE + ')\\)', // 1 alt, 2 url   -> ![alt](url)
+    '\\[([^\\]]+)\\]\\((' + URL_CORE + ')\\)', // 3 text, 4 url  -> [text](url)
+    '`([^`]+)`', // 5 code
+    '\\*\\*([^*]+)\\*\\*', // 6 bold
+    '\\*([^*]+)\\*', // 7 italic
+    '(' + URL_CORE + ')', // 8 bare url
+  ].join('|'),
+  'g',
+);
+
+function inline(s: string, keyPrefix: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  INLINE_RE.lastIndex = 0;
+  let n = 0;
+  while ((m = INLINE_RE.exec(s)) !== null) {
+    if (m.index > last) out.push(<React.Fragment key={`${keyPrefix}t${n}`}>{s.slice(last, m.index)}</React.Fragment>);
+    const k = `${keyPrefix}n${n}`;
+    if (m[1] !== undefined && m[2]) out.push(imageNode(m[2], m[1], k));
+    else if (m[3] !== undefined && m[4]) {
+      // a [label](url) whose label is itself a raw url -> show the tidy label instead
+      out.push(linkNode(m[4], /^https?:\/\//.test(m[3]) ? labelForUrl(m[4]) : m[3], k));
+    } else if (m[5] !== undefined) out.push(<code key={k} className="fc-code">{m[5]}</code>);
+    else if (m[6] !== undefined) out.push(<strong key={k}>{m[6]}</strong>);
+    else if (m[7] !== undefined) out.push(<em key={k}>{m[7]}</em>);
+    else if (m[8]) out.push(isImageUrl(m[8]) ? imageNode(m[8], '', k) : linkNode(m[8], labelForUrl(m[8]), k));
+    last = m.index + m[0].length;
+    n += 1;
+  }
+  if (last < s.length) out.push(<React.Fragment key={`${keyPrefix}t${n}`}>{s.slice(last)}</React.Fragment>);
+  return out;
+}
+
+const UL_RE = /^\s*[-*•]\s+/;
+const OL_RE = /^\s*\d+[.)]\s+/;
+const H_RE = /^\s*(#{1,3})\s+(.*)$/;
+
+/** Minimal, dependency-free rendering of a Friend reply. */
 export function renderReply(text: string): React.ReactNode {
-  const blocks = text.split(/\n{2,}/);
+  const blocks = (text ?? '').split(/\n{2,}/);
   return blocks.map((block, bi) => {
-    const lines = block.split(/\n/);
-    const isList = lines.length > 0 && lines.every((l) => /^\s*[-*•]\s+/.test(l));
-    if (isList) {
+    const lines = block.split(/\n/).filter((l, i, a) => l.trim() !== '' || (i > 0 && i < a.length - 1));
+    if (!lines.length) return null;
+
+    const h = lines.length === 1 ? lines[0].match(H_RE) : null;
+    if (h) {
+      const level = h[1].length; // 1..3
+      const cls = `fc-h fc-h${level}`;
+      return level === 1 ? (
+        <h4 key={bi} className={cls}>{inline(h[2], `${bi}-`)}</h4>
+      ) : level === 2 ? (
+        <h5 key={bi} className={cls}>{inline(h[2], `${bi}-`)}</h5>
+      ) : (
+        <h6 key={bi} className={cls}>{inline(h[2], `${bi}-`)}</h6>
+      );
+    }
+
+    if (lines.every((l) => UL_RE.test(l))) {
       return (
         <ul key={bi} className="fc-ul">
-          {lines.map((l, li) => (
-            <li key={li}>{inline(l.replace(/^\s*[-*•]\s+/, ''))}</li>
-          ))}
+          {lines.map((l, li) => <li key={li}>{inline(l.replace(UL_RE, ''), `${bi}-${li}-`)}</li>)}
         </ul>
       );
     }
+    if (lines.every((l) => OL_RE.test(l))) {
+      return (
+        <ol key={bi} className="fc-ol">
+          {lines.map((l, li) => <li key={li}>{inline(l.replace(OL_RE, ''), `${bi}-${li}-`)}</li>)}
+        </ol>
+      );
+    }
+
     return (
       <p key={bi} className="fc-p">
         {lines.map((l, li) => (
           <span key={li}>
-            {inline(l)}
+            {inline(l, `${bi}-${li}-`)}
             {li < lines.length - 1 ? <br /> : null}
           </span>
         ))}
