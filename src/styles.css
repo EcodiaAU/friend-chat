@@ -240,16 +240,19 @@
   padding: 1px 5px; word-break: break-word;
 }
 
-/* An image URL renders as a preview thumbnail, tappable to open full size. */
+/* An image URL renders as a preview thumbnail, tappable to open full size. It shows
+   the WHOLE image (contain, not crop) and the box shrinks to the image so there is no
+   empty gap under a portrait. */
 .fc-friend .fc-imglink {
-  display: inline-flex; flex-direction: column; gap: 4px;
-  margin: 4px 8px 8px 0; max-width: 220px; vertical-align: top;
-  text-decoration: none; cursor: zoom-in;
+  display: inline-flex; flex-direction: column; gap: 5px;
+  margin: 6px 8px 8px 0; width: fit-content; max-width: 240px;
+  vertical-align: top; text-decoration: none; cursor: zoom-in;
+  color: var(--fc-muted); /* the image link is not blue link text */
 }
 .fc-friend .fc-img {
-  display: block; width: 100%; max-width: 220px; max-height: 180px;
-  object-fit: cover; border-radius: 10px;
-  border: 1px solid var(--fc-line); background: var(--fc-surface);
+  display: block; width: auto; height: auto;
+  max-width: 240px; max-height: 220px; object-fit: contain;
+  border-radius: 10px; border: 1px solid var(--fc-line); background: var(--fc-surface);
   transition: transform 0.18s var(--fc-ease), box-shadow 0.18s var(--fc-ease);
 }
 .fc-friend .fc-imglink:hover .fc-img { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); }
