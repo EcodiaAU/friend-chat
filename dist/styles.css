@@ -47,7 +47,12 @@
 .fc-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34); }
 .fc-fab:active { transform: translateY(0); }
 
-/* ── Blurred scrim (click-to-close) ─────────────────────────────────────── */
+/* ── Blurred scrim (click-to-close), MODAL MODE ONLY ─────────────────────────
+      Rendered only when the drawer is modal (the default). A drawer passed
+      modal={false} renders no scrim element at all, so the host page keeps its
+      scrolling and its clicks and the panel docks beside work in progress. The
+      fix for the swallow is absence, not pointer-events: none, because a 40%
+      black blur over the page you are working in is unreadable either way. ──── */
 .fc-scrim {
   position: fixed;
   inset: 0;
@@ -71,6 +76,12 @@
   z-index: var(--fc-z, 70);
   overflow: visible;
   touch-action: pan-y;
+  /* Scrolling the chat must never chain into the host page ("I scrolled the
+     transcript and the app jumped behind it"). Unconditional, because the scrim
+     never covers the drawer itself: a wheel that reaches the end of the
+     transcript chains to the page in modal mode exactly as it does in
+     non-modal. Scoped to the drawer, so the page scrolls normally elsewhere. */
+  overscroll-behavior: contain;
   will-change: transform;
   color: var(--fc-ink);
   font-family: var(--fc-font);
@@ -174,6 +185,9 @@
   flex: 1; overflow-y: auto; padding: 16px;
   display: flex; flex-direction: column; gap: 12px;
   -webkit-overflow-scrolling: touch;
+  /* The actual scroller: contain it so hitting the top or bottom of the
+     transcript does not scroll the host page behind the drawer. */
+  overscroll-behavior: contain;
 }
 
 /* The app-supplied conversation surface (FriendChat renderBody), filling the sheet
@@ -183,6 +197,9 @@
   display: flex; flex-direction: column;
   overflow: hidden;
   background: var(--fc-paper);
+  /* An app-supplied body owns its own scroller; contain the chain here too so a
+     renderBody consumer (Studio) inherits the fix without repeating it. */
+  overscroll-behavior: contain;
 }
 
 .fc-empty { display: flex; flex-direction: column; gap: 16px; padding: 8px 2px; }

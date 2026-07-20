@@ -97,6 +97,27 @@ export interface FriendChatProps {
    * this app's bottom tab bar. Default 116.
    */
   tabBottom?: number;
+  /**
+   * Whether the open drawer takes the whole surface (modal) or docks beside a page
+   * the person keeps working in (non-modal). Default true, which is today's
+   * behaviour for every app that does not opt out.
+   *
+   * modal (default): a dimmed, blurred, click-to-close scrim covers the viewport
+   * behind the sheet. Correct on a phone, where the sheet is min(390px, 90vw) and
+   * so covers nearly the whole screen: there is nothing meaningful to work
+   * alongside, and a tap on the strip beside it is the expected way to dismiss.
+   *
+   * modal={false}: no scrim at all. The page behind stays scrollable, clickable
+   * and readable, and the drawer is a dockable side panel. Correct on a wide
+   * viewport, where 390px leaves genuine working room. Pass this in a desktop-class
+   * app (Studio). Closing is still one press on the edge tab or the header X, and
+   * the drawer's transcript no longer chains its scroll into the host page.
+   *
+   * Origin: Angelica @ Resonaverde, 2026-07-20. Studio was dead underneath the open
+   * drawer because the scrim swallowed every wheel and click event. That is right
+   * for a dialog and wrong for a side panel.
+   */
+  modal?: boolean;
 }
 
 type Msg = { role: 'you' | 'friend'; text: string; extra?: unknown };
@@ -131,6 +152,7 @@ export function FriendChat({
   seed,
   style,
   tabBottom = 116,
+  modal = true,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
   const dragControls = useDragControls();
@@ -302,9 +324,16 @@ export function FriendChat({
   const headSub = showConnect ? `in ${app}` : `here with you in ${app}`;
 
   return (
-    <div className="fc-root" style={rootStyle}>
+    <div className={`fc-root${modal ? '' : ' fc-nonmodal'}`} style={rootStyle}>
+      {/* The scrim exists ONLY in modal mode. Non-modal does not render a
+          transparent one: a 40% black blur over the page you are working in is
+          unreadable even when it is click-through, so the fix is absence, not
+          pointer-events: none. Closing stays reachable via the edge tab and the
+          header X, both of which are always mounted. */}
       <AnimatePresence>
-        {open && <motion.div key="fc-scrim" className="fc-scrim" onClick={closeDrawer} {...scrimMotion} />}
+        {modal && open && (
+          <motion.div key="fc-scrim" className="fc-scrim" onClick={closeDrawer} {...scrimMotion} />
+        )}
       </AnimatePresence>
 
       <motion.div
@@ -340,7 +369,14 @@ export function FriendChat({
           <FriendMark size={24} {...markTone} />
         </button>
 
-        <div className="fc-drawer-inner" role="dialog" aria-label={headName}>
+        {/* aria-modal only when it is true: a non-modal drawer leaves the rest of
+            the page available to assistive tech, which is exactly the point. */}
+        <div
+          className="fc-drawer-inner"
+          role="dialog"
+          aria-modal={modal ? true : undefined}
+          aria-label={headName}
+        >
           <header className="fc-head">
             <span className="fc-head-mark">
               <FriendMark size={20} {...markTone} />
