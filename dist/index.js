@@ -127,6 +127,28 @@ function inline(s, keyPrefix) {
 var UL_RE = /^\s*[-*•]\s+/;
 var OL_RE = /^\s*\d+[.)]\s+/;
 var H_RE = /^\s*(#{1,3})\s+(.*)$/;
+var TASK_RE = /^\s*[-*•]\s+\[([ xX])\]\s*/;
+var TABLE_SEP_RE = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+var PIPE_ROW_RE = /\|/;
+function cells(line) {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
+function alignments(sep) {
+  return cells(sep).map((c) => {
+    const l = c.startsWith(":");
+    const r = c.endsWith(":");
+    if (l && r) return "center";
+    if (r) return "right";
+    if (l) return "left";
+    return void 0;
+  });
+}
+function isTable(lines) {
+  return lines.length >= 2 && PIPE_ROW_RE.test(lines[0]) && TABLE_SEP_RE.test(lines[1]) && lines[1].includes("-") && lines.slice(2).every((l) => PIPE_ROW_RE.test(l));
+}
 var FENCE_OPEN_RE = /^\s*(?:```|~~~)\s*([A-Za-z0-9_+.#-]*)\s*$/;
 var FENCE_CLOSE_RE = /^\s*(?:```|~~~)\s*$/;
 function segment(text) {
@@ -223,6 +245,24 @@ function renderProse(text, si) {
       const level = h[1].length;
       const cls = `fc-h fc-h${level}`;
       return level === 1 ? /* @__PURE__ */ jsx3("h4", { className: cls, children: inline(h[2], `${bi}-`) }, bi) : level === 2 ? /* @__PURE__ */ jsx3("h5", { className: cls, children: inline(h[2], `${bi}-`) }, bi) : /* @__PURE__ */ jsx3("h6", { className: cls, children: inline(h[2], `${bi}-`) }, bi);
+    }
+    if (isTable(lines)) {
+      const head = cells(lines[0]);
+      const align = alignments(lines[1]);
+      const body = lines.slice(2).map(cells);
+      return /* @__PURE__ */ jsx3("div", { className: "fc-tablewrap", children: /* @__PURE__ */ jsxs2("table", { className: "fc-table", children: [
+        /* @__PURE__ */ jsx3("thead", { children: /* @__PURE__ */ jsx3("tr", { children: head.map((c, ci) => /* @__PURE__ */ jsx3("th", { style: align[ci] ? { textAlign: align[ci] } : void 0, children: inline(c, `${bi}-h${ci}-`) }, ci)) }) }),
+        /* @__PURE__ */ jsx3("tbody", { children: body.map((row, ri) => /* @__PURE__ */ jsx3("tr", { children: head.map((_, ci) => /* @__PURE__ */ jsx3("td", { style: align[ci] ? { textAlign: align[ci] } : void 0, children: inline(row[ci] ?? "", `${bi}-${ri}-${ci}-`) }, ci)) }, ri)) })
+      ] }) }, bi);
+    }
+    if (lines.every((l) => TASK_RE.test(l))) {
+      return /* @__PURE__ */ jsx3("ul", { className: "fc-ul fc-tasks", children: lines.map((l, li) => {
+        const done = /[xX]/.test(l.match(TASK_RE)[1]);
+        return /* @__PURE__ */ jsxs2("li", { className: done ? "fc-task fc-task-done" : "fc-task", children: [
+          /* @__PURE__ */ jsx3("span", { className: "fc-check", role: "img", "aria-label": done ? "done" : "not done", children: done ? "\u2713" : "" }),
+          /* @__PURE__ */ jsx3("span", { children: inline(l.replace(TASK_RE, ""), `${bi}-${li}-`) })
+        ] }, li);
+      }) }, bi);
     }
     if (lines.every((l) => UL_RE.test(l))) {
       return /* @__PURE__ */ jsx3("ul", { className: "fc-ul", children: lines.map((l, li) => /* @__PURE__ */ jsx3("li", { children: inline(l.replace(UL_RE, ""), `${bi}-${li}-`) }, li)) }, bi);

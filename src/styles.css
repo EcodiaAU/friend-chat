@@ -271,6 +271,48 @@
   padding: 1px 5px; word-break: break-word;
 }
 
+/* ── Table: a small, quiet grid. The drawer is 390px wide at most, so the table
+      scrolls sideways inside its own box rather than forcing the reply to. ─────── */
+.fc-friend .fc-tablewrap {
+  margin: 8px 0 10px;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--fc-line); border-radius: 10px;
+}
+.fc-friend .fc-tablewrap:last-child { margin-bottom: 0; }
+.fc-friend .fc-table {
+  border-collapse: collapse;
+  width: 100%; min-width: max-content;
+  font-size: 13.5px; line-height: 1.45;
+}
+.fc-friend .fc-table th,
+.fc-friend .fc-table td {
+  padding: 7px 11px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--fc-line);
+  white-space: nowrap;
+}
+.fc-friend .fc-table th {
+  font-weight: 700; color: var(--fc-ink);
+  background: var(--fc-surface);
+}
+.fc-friend .fc-table td { font-weight: 500; color: var(--fc-ink); }
+.fc-friend .fc-table tbody tr:last-child th,
+.fc-friend .fc-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Task list: the checkbox is a picture of state, not a control. A reply is a
+      record of what the Friend found, so a person cannot tick something true. ──── */
+.fc-friend .fc-tasks { padding-left: 2px; list-style: none; }
+.fc-friend .fc-task { display: flex; align-items: flex-start; gap: 8px; }
+.fc-friend .fc-check {
+  flex: 0 0 auto; margin-top: 2px;
+  width: 15px; height: 15px; border-radius: 4px;
+  border: 1.5px solid var(--fc-line); background: var(--fc-paper);
+  display: inline-grid; place-items: center;
+  font-size: 10.5px; line-height: 1; color: var(--fc-on-accent);
+}
+.fc-friend .fc-task-done .fc-check { background: var(--fc-accent); border-color: var(--fc-accent); }
+.fc-friend .fc-task-done { color: var(--fc-muted); }
+
 /* ── Fenced code block: monospaced, its own horizontal scroll, one press to take it.
       No highlighter and no highlighting theme: the widget ships to four apps and a
       syntax engine is a dependency, a payload and a palette argument for something a

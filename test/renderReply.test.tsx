@@ -94,5 +94,52 @@ check('inline code still renders (regression)', h8.includes('<code class="fc-cod
 const h18 = html('```\none\n```\n\nmid\n\n```\ntwo\n```');
 check('two fences -> two blocks', (h18.match(/fc-pre/g) || []).length === 2 && h18.includes('mid'), h18);
 
+// ── Tables ─────────────────────────────────────────────────────────────────
+// 19. A pipe table renders as a real table with a header row.
+const h19 = html('| Day | Spot |\n| --- | --- |\n| Sat | Beach |\n| Sun | Markets |');
+check('pipe table -> <table>', h19.includes('class="fc-table"') && h19.includes('<thead') && h19.includes('<th'));
+check('table: header cells', h19.includes('>Day<') && h19.includes('>Spot<'));
+check('table: body rows', (h19.match(/<tr>/g) || []).length === 3 && h19.includes('>Markets<'), h19);
+
+// 20. Alignment markers in the separator drive text-align.
+const h20 = html('| a | b | c |\n| :-- | --: | :-: |\n| 1 | 2 | 3 |');
+check('table: alignment from separator', h20.includes('text-align:left') && h20.includes('text-align:right') && h20.includes('text-align:center'), h20);
+
+// 21. Inline markup works inside a cell, and a link in a cell is still tidied.
+const h21 = html('| What | Where |\n| --- | --- |\n| **Bold** | [Studio](https://studio.ecodia.au/x) |');
+check('table: inline markup in cells', h21.includes('<strong>Bold</strong>') && h21.includes('class="fc-link"'));
+check('table: no raw URL text in a cell', !/>[^<]*https:\/\//.test(h21), h21);
+
+// 22. A short row is padded, not collapsed.
+const h22 = html('| a | b | c |\n| --- | --- | --- |\n| 1 |');
+check('table: short row padded to header width', (h22.match(/<td/g) || []).length === 3, h22);
+
+// 23. A paragraph that merely contains a pipe is NOT a table.
+const h23 = html('Use a | b to pipe it.\nThat is all.');
+check('pipe in prose is not a table', !h23.includes('fc-table') && h23.includes('fc-p'), h23);
+
+// ── Task lists ─────────────────────────────────────────────────────────────
+// 24. "- [ ]" / "- [x]" render as checkbox glyphs.
+const h24 = html('- [x] Booked the van\n- [ ] Packed the tent');
+check('task list -> fc-tasks', h24.includes('class="fc-ul fc-tasks"'));
+check('task list: done + not-done states', h24.includes('fc-task fc-task-done') && h24.includes('aria-label="done"') && h24.includes('aria-label="not done"'), h24);
+check('task list: the bracket markers are gone from the text', !h24.includes('[x]') && !h24.includes('[ ]'), h24);
+check('task list: item text survives', h24.includes('Booked the van') && h24.includes('Packed the tent'));
+
+// 25. An uppercase [X] counts as done.
+const h25 = html('- [X] Shouted');
+check('task list: [X] uppercase is done', h25.includes('fc-task-done'), h25);
+
+// 26. A plain bullet list is still a plain bullet list, not a checklist.
+check('plain bullets are not a task list (regression)', !h6.includes('fc-tasks'), h6);
+
+// 27. A mixed list (one task, one plain bullet) falls back to a plain list.
+const h27 = html('- [x] done thing\n- plain thing');
+check('mixed list falls back to plain <ul>', !h27.includes('fc-tasks') && h27.includes('class="fc-ul"'), h27);
+
+// 28. Inline markup inside a task item works.
+const h28 = html('- [ ] Ask about **the van**');
+check('task list: inline markup in an item', h28.includes('<strong>the van</strong>'), h28);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

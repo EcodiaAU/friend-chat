@@ -94,6 +94,45 @@ function inline(s: string, keyPrefix: string): React.ReactNode[] {
 const UL_RE = /^\s*[-*•]\s+/;
 const OL_RE = /^\s*\d+[.)]\s+/;
 const H_RE = /^\s*(#{1,3})\s+(.*)$/;
+// A checklist item: "- [ ] thing" / "- [x] thing". Read-only in a reply, so the
+// glyph is a picture of state, not a control the person can toggle to a lie.
+const TASK_RE = /^\s*[-*•]\s+\[([ xX])\]\s*/;
+
+// ── Tables ──────────────────────────────────────────────────────────────────
+// A pipe table is a header row, a dash separator, then body rows. Recognised only
+// with that separator present, so a paragraph that merely happens to contain a
+// vertical bar is still a paragraph.
+const TABLE_SEP_RE = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+const PIPE_ROW_RE = /\|/;
+
+function cells(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|')) s = s.slice(0, -1);
+  return s.split('|').map((c) => c.trim());
+}
+
+/** Column alignment from the separator row: :--- left, ---: right, :---: centre. */
+function alignments(sep: string): (('left' | 'right' | 'center') | undefined)[] {
+  return cells(sep).map((c) => {
+    const l = c.startsWith(':');
+    const r = c.endsWith(':');
+    if (l && r) return 'center';
+    if (r) return 'right';
+    if (l) return 'left';
+    return undefined;
+  });
+}
+
+function isTable(lines: string[]): boolean {
+  return (
+    lines.length >= 2 &&
+    PIPE_ROW_RE.test(lines[0]) &&
+    TABLE_SEP_RE.test(lines[1]) &&
+    lines[1].includes('-') &&
+    lines.slice(2).every((l) => PIPE_ROW_RE.test(l))
+  );
+}
 
 // ── Fenced code ─────────────────────────────────────────────────────────────
 // A ``` fence is lifted out BEFORE anything else looks at the text, for two
@@ -225,6 +264,59 @@ function renderProse(text: string, si: number): React.ReactNode {
         <h5 key={bi} className={cls}>{inline(h[2], `${bi}-`)}</h5>
       ) : (
         <h6 key={bi} className={cls}>{inline(h[2], `${bi}-`)}</h6>
+      );
+    }
+
+    if (isTable(lines)) {
+      const head = cells(lines[0]);
+      const align = alignments(lines[1]);
+      const body = lines.slice(2).map(cells);
+      return (
+        <div key={bi} className="fc-tablewrap">
+          <table className="fc-table">
+            <thead>
+              <tr>
+                {head.map((c, ci) => (
+                  <th key={ci} style={align[ci] ? { textAlign: align[ci] } : undefined}>
+                    {inline(c, `${bi}-h${ci}-`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row, ri) => (
+                <tr key={ri}>
+                  {/* Padded to the header width so a short row does not collapse the
+                      grid and a long one does not spill past its heading. */}
+                  {head.map((_, ci) => (
+                    <td key={ci} style={align[ci] ? { textAlign: align[ci] } : undefined}>
+                      {inline(row[ci] ?? '', `${bi}-${ri}-${ci}-`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // A checklist before a plain bullet list, since every task line is also a bullet.
+    if (lines.every((l) => TASK_RE.test(l))) {
+      return (
+        <ul key={bi} className="fc-ul fc-tasks">
+          {lines.map((l, li) => {
+            const done = /[xX]/.test(l.match(TASK_RE)![1]);
+            return (
+              <li key={li} className={done ? 'fc-task fc-task-done' : 'fc-task'}>
+                <span className="fc-check" role="img" aria-label={done ? 'done' : 'not done'}>
+                  {done ? '✓' : ''}
+                </span>
+                <span>{inline(l.replace(TASK_RE, ''), `${bi}-${li}-`)}</span>
+              </li>
+            );
+          })}
+        </ul>
       );
     }
 
