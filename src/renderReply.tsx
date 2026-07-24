@@ -5,11 +5,16 @@ import * as React from 'react';
  * anyone: paragraphs, ordered + unordered lists, small headings, and inline
  * **bold** / *italic* / `code` / [links](url) / ![images](url).
  *
- * The load-bearing rule: a RAW URL never appears as text. A bare link becomes a
- * clickable label; a bare image URL becomes a thumbnail preview. So even when the
- * Friend pastes a raw URL, the person sees a tidy link or a picture, never a wall of
- * https://... . (Origin 2026-07-17: the image-library answer dumped a raw Supabase
- * URL and the filename with no preview and no clickable library link.)
+ * The load-bearing rule: in prose, a RAW URL never appears as text. A bare link
+ * becomes a clickable label; a bare image URL becomes a thumbnail preview. So even
+ * when the Friend pastes a raw URL, the person sees a tidy link or a picture, never a
+ * wall of https://... . (Origin 2026-07-17: the image-library answer dumped a raw
+ * Supabase URL and the filename with no preview and no clickable library link.)
+ *
+ * The one deliberate carve-out is inside a ``` fence, where every character is left
+ * exactly as it arrived. A URL in a curl line is part of the command being handed
+ * over, and tidying it into a label would break the thing the person is about to
+ * paste. Fence content never meets the inline pass at all.
  */
 
 const URL_CORE = 'https?:\\/\\/[^\\s<>()\\[\\]]+[^\\s<>()\\[\\].,;:!?\'"]';
@@ -90,10 +95,123 @@ const UL_RE = /^\s*[-*•]\s+/;
 const OL_RE = /^\s*\d+[.)]\s+/;
 const H_RE = /^\s*(#{1,3})\s+(.*)$/;
 
+// ── Fenced code ─────────────────────────────────────────────────────────────
+// A ``` fence is lifted out BEFORE anything else looks at the text, for two
+// reasons. Blank lines inside a fence would otherwise split it across paragraph
+// blocks, and every character between the fences has to survive verbatim: a
+// snippet full of * and _ is code, not emphasis, so it never meets the inline
+// pass at all.
+
+const FENCE_OPEN_RE = /^\s*(?:```|~~~)\s*([A-Za-z0-9_+.#-]*)\s*$/;
+const FENCE_CLOSE_RE = /^\s*(?:```|~~~)\s*$/;
+
+type Seg = { kind: 'code'; lang: string; code: string } | { kind: 'prose'; text: string };
+
+function segment(text: string): Seg[] {
+  const lines = text.split('\n');
+  const out: Seg[] = [];
+  let prose: string[] = [];
+  const flush = () => {
+    if (prose.some((l) => l.trim() !== '')) out.push({ kind: 'prose', text: prose.join('\n') });
+    prose = [];
+  };
+  for (let i = 0; i < lines.length; i += 1) {
+    const open = lines[i].match(FENCE_OPEN_RE);
+    if (!open) {
+      prose.push(lines[i]);
+      continue;
+    }
+    flush();
+    const body: string[] = [];
+    i += 1;
+    // An UNCLOSED fence still renders: a reply cut off mid-snippet (a stopped turn,
+    // a stream still arriving) shows the code it has rather than the fence markers.
+    while (i < lines.length && !FENCE_CLOSE_RE.test(lines[i])) {
+      body.push(lines[i]);
+      i += 1;
+    }
+    out.push({ kind: 'code', lang: open[1] || '', code: body.join('\n') });
+  }
+  flush();
+  return out;
+}
+
+async function copyText(s: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(s);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path: a denied permission is not a dead button */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = s;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A code snippet in a reply: monospaced, its own scroll, and one press to take it.
+ * A Friend that answers with code is answering with something the person means to
+ * USE, so the copy is part of the answer rather than a nicety.
+ */
+function CodeBlock({ code, lang }: { code: string; lang: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  return (
+    <div className="fc-codewrap">
+      <div className="fc-codebar">
+        <span className="fc-codelang">{lang || 'code'}</span>
+        <button
+          type="button"
+          className="fc-copy"
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          onClick={() => {
+            void copyText(code).then((ok) => {
+              if (!ok) return;
+              setCopied(true);
+              if (timer.current) clearTimeout(timer.current);
+              timer.current = setTimeout(() => setCopied(false), 1600);
+            });
+          }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="fc-pre">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 /** Minimal, dependency-free rendering of a Friend reply. */
 export function renderReply(text: string): React.ReactNode {
-  const blocks = (text ?? '').split(/\n{2,}/);
-  return blocks.map((block, bi) => {
+  return segment(text ?? '').map((seg, si) =>
+    seg.kind === 'code' ? (
+      <CodeBlock key={`c${si}`} code={seg.code} lang={seg.lang} />
+    ) : (
+      <React.Fragment key={`s${si}`}>{renderProse(seg.text, si)}</React.Fragment>
+    ),
+  );
+}
+
+function renderProse(text: string, si: number): React.ReactNode {
+  const blocks = text.split(/\n{2,}/);
+  return blocks.map((block, bi0) => {
+    // Keys stay unique across segments: a reply is prose, fence, prose.
+    const bi = `${si}-${bi0}`;
     const lines = block.split(/\n/).filter((l, i, a) => l.trim() !== '' || (i > 0 && i < a.length - 1));
     if (!lines.length) return null;
 

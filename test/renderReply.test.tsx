@@ -57,5 +57,42 @@ check('links are target=_blank rel=noopener', h3.includes('target="_blank"') && 
 const h10 = html('Just a normal sentence.');
 check('plain text passthrough', h10.includes('Just a normal sentence.') && !h10.includes('fc-link'));
 
+// ── Fenced code blocks ─────────────────────────────────────────────────────
+// 11. A fence renders as <pre class="fc-pre"><code> with a copy button.
+const h11 = html('Try this:\n\n```js\nconst a = 1;\n```\n\nThat is it.');
+check('fence -> pre.fc-pre + code', h11.includes('class="fc-pre"') && h11.includes('<code>const a = 1;</code>'));
+check('fence -> copy button', h11.includes('class="fc-copy"') && h11.includes('>Copy<'));
+check('fence -> language label', h11.includes('class="fc-codelang"') && h11.includes('>js<'));
+check('prose around a fence still renders', h11.includes('Try this:') && h11.includes('That is it.'));
+
+// 12. THE load-bearing one: * and _ inside a fence are code, never emphasis.
+const starry = 'a * b ** c _d_ __e__ *not italic*';
+const h12 = html('```\n' + starry + '\n```');
+check('fence: * and _ survive verbatim', h12.includes('a * b ** c _d_ __e__ *not italic*'), h12);
+check('fence: no <em>/<strong> from fenced content', !h12.includes('<em>') && !h12.includes('<strong>'), h12);
+
+// 13. A blank line inside a fence does not split it into two blocks.
+const h13 = html('```py\ndef a():\n\n    return 1\n```');
+check('fence: blank line stays inside one block', (h13.match(/fc-pre/g) || []).length === 1 && h13.includes('return 1'), h13);
+
+// 14. A URL inside a fence stays literal text: it is code, not a link to tidy up.
+const h14 = html('```\ncurl https://api.ecodia.au/thing\n```');
+check('fence: URL stays literal, not linkified', h14.includes('curl https://api.ecodia.au/thing') && !h14.includes('fc-link'), h14);
+
+// 15. Backticks with no language still render, labelled generically.
+const h15 = html('```\nplain\n```');
+check('fence with no language -> "code" label', h15.includes('>code<') && h15.includes('plain'));
+
+// 16. An unclosed fence (a stopped or still-streaming turn) still shows its code.
+const h16 = html('Here:\n\n```sh\nnpm run build');
+check('unclosed fence still renders its code', h16.includes('fc-pre') && h16.includes('npm run build'), h16);
+
+// 17. Inline `code` is untouched by the fence work.
+check('inline code still renders (regression)', h8.includes('<code class="fc-code">code</code>'), h8);
+
+// 18. Two fences in one reply stay separate.
+const h18 = html('```\none\n```\n\nmid\n\n```\ntwo\n```');
+check('two fences -> two blocks', (h18.match(/fc-pre/g) || []).length === 2 && h18.includes('mid'), h18);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

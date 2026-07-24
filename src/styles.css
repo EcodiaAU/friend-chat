@@ -271,6 +271,49 @@
   padding: 1px 5px; word-break: break-word;
 }
 
+/* ── Fenced code block: monospaced, its own horizontal scroll, one press to take it.
+      No highlighter and no highlighting theme: the widget ships to four apps and a
+      syntax engine is a dependency, a payload and a palette argument for something a
+      person is going to paste elsewhere anyway. ─────────────────────────────────── */
+.fc-friend .fc-codewrap {
+  margin: 8px 0 10px;
+  border: 1px solid var(--fc-line);
+  border-radius: 10px;
+  background: var(--fc-code-bg, var(--fc-surface));
+  overflow: hidden;
+}
+.fc-friend .fc-codewrap:last-child { margin-bottom: 0; }
+.fc-friend .fc-codebar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 6px 5px 11px;
+  border-bottom: 1px solid var(--fc-line);
+  background: var(--fc-code-bar, transparent);
+}
+.fc-friend .fc-codelang {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: lowercase; color: var(--fc-muted);
+}
+.fc-friend .fc-copy {
+  background: none; border: 1px solid var(--fc-line); border-radius: 6px;
+  padding: 3px 9px; font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--fc-muted); cursor: pointer;
+  transition: color 0.15s var(--fc-ease), border-color 0.15s var(--fc-ease), background 0.15s var(--fc-ease);
+}
+.fc-friend .fc-copy:hover { color: var(--fc-ink); border-color: var(--fc-ink); }
+.fc-friend .fc-pre {
+  margin: 0; padding: 11px 12px;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.fc-friend .fc-pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; line-height: 1.55; font-weight: 500;
+  color: var(--fc-ink);
+  white-space: pre; tab-size: 2;
+  background: none; border: none; padding: 0;
+}
+
 /* An image URL renders as a preview thumbnail, tappable to open full size. It shows
    the WHOLE image (contain, not crop) and the box shrinks to the image so there is no
    empty gap under a portrait. */

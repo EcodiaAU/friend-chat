@@ -127,9 +127,95 @@ function inline(s, keyPrefix) {
 var UL_RE = /^\s*[-*•]\s+/;
 var OL_RE = /^\s*\d+[.)]\s+/;
 var H_RE = /^\s*(#{1,3})\s+(.*)$/;
+var FENCE_OPEN_RE = /^\s*(?:```|~~~)\s*([A-Za-z0-9_+.#-]*)\s*$/;
+var FENCE_CLOSE_RE = /^\s*(?:```|~~~)\s*$/;
+function segment(text) {
+  const lines = text.split("\n");
+  const out = [];
+  let prose = [];
+  const flush = () => {
+    if (prose.some((l) => l.trim() !== "")) out.push({ kind: "prose", text: prose.join("\n") });
+    prose = [];
+  };
+  for (let i = 0; i < lines.length; i += 1) {
+    const open = lines[i].match(FENCE_OPEN_RE);
+    if (!open) {
+      prose.push(lines[i]);
+      continue;
+    }
+    flush();
+    const body = [];
+    i += 1;
+    while (i < lines.length && !FENCE_CLOSE_RE.test(lines[i])) {
+      body.push(lines[i]);
+      i += 1;
+    }
+    out.push({ kind: "code", lang: open[1] || "", code: body.join("\n") });
+  }
+  flush();
+  return out;
+}
+async function copyText(s) {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(s);
+      return true;
+    }
+  } catch {
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = s;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-9999px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+function CodeBlock({ code, lang }) {
+  const [copied, setCopied] = React.useState(false);
+  const timer = React.useRef(null);
+  React.useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return /* @__PURE__ */ jsxs2("div", { className: "fc-codewrap", children: [
+    /* @__PURE__ */ jsxs2("div", { className: "fc-codebar", children: [
+      /* @__PURE__ */ jsx3("span", { className: "fc-codelang", children: lang || "code" }),
+      /* @__PURE__ */ jsx3(
+        "button",
+        {
+          type: "button",
+          className: "fc-copy",
+          "aria-label": copied ? "Copied" : "Copy code",
+          onClick: () => {
+            void copyText(code).then((ok) => {
+              if (!ok) return;
+              setCopied(true);
+              if (timer.current) clearTimeout(timer.current);
+              timer.current = setTimeout(() => setCopied(false), 1600);
+            });
+          },
+          children: copied ? "Copied" : "Copy"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsx3("pre", { className: "fc-pre", children: /* @__PURE__ */ jsx3("code", { children: code }) })
+  ] });
+}
 function renderReply(text) {
-  const blocks = (text ?? "").split(/\n{2,}/);
-  return blocks.map((block, bi) => {
+  return segment(text ?? "").map(
+    (seg, si) => seg.kind === "code" ? /* @__PURE__ */ jsx3(CodeBlock, { code: seg.code, lang: seg.lang }, `c${si}`) : /* @__PURE__ */ jsx3(React.Fragment, { children: renderProse(seg.text, si) }, `s${si}`)
+  );
+}
+function renderProse(text, si) {
+  const blocks = text.split(/\n{2,}/);
+  return blocks.map((block, bi0) => {
+    const bi = `${si}-${bi0}`;
     const lines = block.split(/\n/).filter((l, i, a) => l.trim() !== "" || i > 0 && i < a.length - 1);
     if (!lines.length) return null;
     const h = lines.length === 1 ? lines[0].match(H_RE) : null;
