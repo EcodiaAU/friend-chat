@@ -21,7 +21,9 @@
     "*.css"
   ],
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "test": "node test/run.mjs",
+    "demo": "vite"
   },
   "peerDependencies": {
     "framer-motion": ">=10",

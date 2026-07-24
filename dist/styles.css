@@ -215,6 +215,20 @@
 }
 .fc-example:hover { background: rgba(26, 26, 23, 0.1); transform: translateY(-1px); }
 
+/* One person turn: the bubble, plus the queued hint under it when the message was
+   sent mid-reply. Carries the geometry .fc-you used to own so an ordinary turn is
+   pixel-identical to before the queue existed. */
+.fc-turn {
+  align-self: flex-end; max-width: 84%;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+}
+.fc-turn .fc-you { align-self: auto; max-width: 100%; }
+/* A message sent while the Friend was still replying: held, visibly, never dropped. */
+.fc-queued {
+  font-size: 11.5px; font-weight: 500; line-height: 1.3;
+  color: var(--fc-muted); padding-right: 3px;
+}
+
 .fc-you {
   align-self: flex-end; max-width: 84%;
   background: var(--fc-accent); color: var(--fc-on-accent);
@@ -310,6 +324,13 @@
 .fc-stop { background: var(--fc-accent, #2b2722); }
 .fc-stop-sq { display: block; width: 11px; height: 11px; border-radius: 2px; background: var(--fc-on-accent, #fff); }
 .fc-stop:hover:not(:disabled) { filter: brightness(1.08); }
+/* Stop when it has stepped aside to make room for send: smaller and quieter, because
+   send is the primary action the moment there is something to send. */
+.fc-stop-aside {
+  width: 34px; height: 34px;
+  background: var(--fc-surface); border: 1px solid var(--fc-line);
+}
+.fc-stop-aside .fc-stop-sq { width: 9px; height: 9px; background: var(--fc-muted); }
 
 
 /* ── Connect-to-buy nudge (fills the drawer body when not connected) ─────── */

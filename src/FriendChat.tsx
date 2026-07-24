@@ -120,7 +120,17 @@ export interface FriendChatProps {
   modal?: boolean;
 }
 
-type Msg = { role: 'you' | 'friend'; text: string; extra?: unknown };
+type Msg = {
+  role: 'you' | 'friend';
+  text: string;
+  extra?: unknown;
+  /**
+   * A person turn sent while the Friend was still replying: it is in the transcript
+   * already, held in the queue, and answered the moment the current turn settles.
+   * Rendered with a quiet "queued" hint so the hold is visible rather than silent.
+   */
+  queued?: boolean;
+};
 
 /**
  * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
@@ -169,6 +179,12 @@ export function FriendChat({
     setStopping(true);
     abortRef.current?.abort();
   }
+  // Messages sent while a turn was still streaming, fired in order as each turn
+  // settles. A ref, not state: the drain runs inside the finishing turn's own
+  // `finally`, where a `busy` read off state would still be the stale `true` from
+  // that turn and would re-queue the item it is trying to fire.
+  const queueRef = React.useRef<{ text: string }[]>([]);
+  const busyRef = React.useRef(false);
   const [name, setName] = React.useState(initialName);
   const [degraded, setDegraded] = React.useState(false);
   const streamRef = React.useRef<HTMLDivElement>(null);
@@ -229,11 +245,30 @@ export function FriendChat({
   };
   const markTone = { barColor: 'var(--fc-on-accent)', dotColor: 'var(--fc-on-accent)' };
 
-  async function send(text: string) {
+  async function send(text: string, fromQueue = false) {
     const msg = text.trim();
-    if (!msg || busy || (!ask && !askStream)) return;
+    if (!msg || (!ask && !askStream)) return;
+    if (busyRef.current && !fromQueue) {
+      // QUEUE, never drop. A message typed while the Friend is still replying lands
+      // in the transcript straight away with a quiet queued hint and is held here;
+      // the `finally` below fires it the moment the current turn settles. Before
+      // this, a mid-turn send was silently swallowed and the person had to notice
+      // their own message had never happened.
+      queueRef.current = [...queueRef.current, { text: msg }];
+      setMessages((m) => [...m, { role: 'you', text: msg, queued: true }]);
+      setInput('');
+      return;
+    }
     setInput('');
-    setMessages((m) => [...m, { role: 'you', text: msg }]);
+    // A queued message is already on screen: un-mark the first held bubble rather
+    // than appending a duplicate of it.
+    setMessages((m) => {
+      if (!fromQueue) return [...m, { role: 'you', text: msg }];
+      const i = m.findIndex((x) => x.queued);
+      if (i < 0) return [...m, { role: 'you', text: msg }];
+      return [...m.slice(0, i), { ...m[i], queued: false }, ...m.slice(i + 1)];
+    });
+    busyRef.current = true;
     setBusy(true);
     setStopping(false);
     const ctrl = new AbortController();
@@ -260,6 +295,9 @@ export function FriendChat({
           });
         });
         if (!res.friend_connected) {
+          // The Friend is gone for this person: drop anything they had queued rather
+          // than firing it into a transport that just told us it cannot serve them.
+          queueRef.current = [];
           setDegraded(true);
           closeDrawer();
           return;
@@ -300,9 +338,19 @@ export function FriendChat({
         setMessages((m) => [...m, { role: 'friend', text: `I could not reach ${name} just then. Try again in a moment.` }]);
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
       setStopping(false);
       abortRef.current = null;
+      // Fire the next held message. Sequential by construction: the recursive send
+      // sets busy again, so anything behind it keeps waiting its turn. Reached on
+      // every settle path, a stopped turn included, so pressing stop still answers
+      // what the person queued while the abandoned turn ran.
+      const next = queueRef.current[0];
+      if (next) {
+        queueRef.current = queueRef.current.slice(1);
+        void send(next.text, true);
+      }
     }
   }
 
@@ -437,8 +485,13 @@ export function FriendChat({
                 )}
                 {messages.map((m, i) =>
                   m.role === 'you' ? (
-                    <div key={i} className="fc-you">
-                      {m.text}
+                    <div key={i} className="fc-turn">
+                      <div className="fc-you">{m.text}</div>
+                      {m.queued ? (
+                        <div className="fc-queued" aria-live="polite">
+                          queued: answered next
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div key={i} className="fc-friend">
@@ -462,20 +515,43 @@ export function FriendChat({
                   void send(input);
                 }}
               >
+                {/* Never disabled, even mid-turn: the composer is how a message gets
+                    queued, and a locked input is what made a mid-turn thought vanish. */}
                 <input
                   className="fc-input"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={placeholder ?? `Ask ${name}...`}
-                  disabled={busy}
                   autoComplete="off"
                 />
-                {busy ? (
+                {/* With a reply in flight and nothing typed, the send button itself is
+                    the stop square: one control, where the thumb is already going. The
+                    moment they start typing, send comes back so the message can be
+                    queued and stop steps aside into its own button beside it. */}
+                {busy && input.trim() ? (
+                  <button
+                    className="fc-send fc-stop fc-stop-aside"
+                    type="button"
+                    onClick={stop}
+                    disabled={stopping}
+                    aria-label="Stop"
+                    title="Stop"
+                  >
+                    <span className="fc-stop-sq" aria-hidden />
+                  </button>
+                ) : null}
+                {busy && !input.trim() ? (
                   <button className="fc-send fc-stop" type="button" onClick={stop} disabled={stopping} aria-label="Stop" title="Stop">
                     <span className="fc-stop-sq" aria-hidden />
                   </button>
                 ) : (
-                  <button className="fc-send" type="submit" disabled={!input.trim()} aria-label="Send">
+                  <button
+                    className="fc-send"
+                    type="submit"
+                    disabled={!input.trim()}
+                    aria-label="Send"
+                    title={busy ? `${name} is still replying. Send now and it is answered next.` : 'Send'}
+                  >
                     →
                   </button>
                 )}

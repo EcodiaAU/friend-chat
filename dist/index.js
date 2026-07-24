@@ -188,6 +188,8 @@ function FriendChat({
     setStopping(true);
     abortRef.current?.abort();
   }
+  const queueRef = React2.useRef([]);
+  const busyRef = React2.useRef(false);
   const [name, setName] = React2.useState(initialName);
   const [degraded, setDegraded] = React2.useState(false);
   const streamRef = React2.useRef(null);
@@ -234,11 +236,23 @@ function FriendChat({
     transition: { duration: 0.18 }
   };
   const markTone = { barColor: "var(--fc-on-accent)", dotColor: "var(--fc-on-accent)" };
-  async function send(text) {
+  async function send(text, fromQueue = false) {
     const msg = text.trim();
-    if (!msg || busy || !ask && !askStream) return;
+    if (!msg || !ask && !askStream) return;
+    if (busyRef.current && !fromQueue) {
+      queueRef.current = [...queueRef.current, { text: msg }];
+      setMessages((m) => [...m, { role: "you", text: msg, queued: true }]);
+      setInput("");
+      return;
+    }
     setInput("");
-    setMessages((m) => [...m, { role: "you", text: msg }]);
+    setMessages((m) => {
+      if (!fromQueue) return [...m, { role: "you", text: msg }];
+      const i = m.findIndex((x) => x.queued);
+      if (i < 0) return [...m, { role: "you", text: msg }];
+      return [...m.slice(0, i), { ...m[i], queued: false }, ...m.slice(i + 1)];
+    });
+    busyRef.current = true;
     setBusy(true);
     setStopping(false);
     const ctrl = new AbortController();
@@ -261,6 +275,7 @@ function FriendChat({
           });
         });
         if (!res.friend_connected) {
+          queueRef.current = [];
           setDegraded(true);
           closeDrawer();
           return;
@@ -296,9 +311,15 @@ function FriendChat({
         setMessages((m) => [...m, { role: "friend", text: `I could not reach ${name} just then. Try again in a moment.` }]);
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
       setStopping(false);
       abortRef.current = null;
+      const next = queueRef.current[0];
+      if (next) {
+        queueRef.current = queueRef.current.slice(1);
+        void send(next.text, true);
+      }
     }
   }
   const seedNonce = seed?.nonce ?? 0;
@@ -386,7 +407,10 @@ function FriendChat({
                       examples.length > 0 && /* @__PURE__ */ jsx4("div", { className: "fc-examples", children: examples.map((ex) => /* @__PURE__ */ jsx4("button", { className: "fc-example", onClick: () => send(ex), children: ex }, ex)) })
                     ] }),
                     messages.map(
-                      (m, i) => m.role === "you" ? /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
+                      (m, i) => m.role === "you" ? /* @__PURE__ */ jsxs3("div", { className: "fc-turn", children: [
+                        /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }),
+                        m.queued ? /* @__PURE__ */ jsx4("div", { className: "fc-queued", "aria-live": "polite", children: "queued: answered next" }) : null
+                      ] }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
                         renderReply(m.text),
                         renderExtra && m.extra != null ? renderExtra(m.extra) : null
                       ] }, i)
@@ -413,11 +437,32 @@ function FriendChat({
                             value: input,
                             onChange: (e) => setInput(e.target.value),
                             placeholder: placeholder ?? `Ask ${name}...`,
-                            disabled: busy,
                             autoComplete: "off"
                           }
                         ),
-                        busy ? /* @__PURE__ */ jsx4("button", { className: "fc-send fc-stop", type: "button", onClick: stop, disabled: stopping, "aria-label": "Stop", title: "Stop", children: /* @__PURE__ */ jsx4("span", { className: "fc-stop-sq", "aria-hidden": true }) }) : /* @__PURE__ */ jsx4("button", { className: "fc-send", type: "submit", disabled: !input.trim(), "aria-label": "Send", children: "\u2192" })
+                        busy && input.trim() ? /* @__PURE__ */ jsx4(
+                          "button",
+                          {
+                            className: "fc-send fc-stop fc-stop-aside",
+                            type: "button",
+                            onClick: stop,
+                            disabled: stopping,
+                            "aria-label": "Stop",
+                            title: "Stop",
+                            children: /* @__PURE__ */ jsx4("span", { className: "fc-stop-sq", "aria-hidden": true })
+                          }
+                        ) : null,
+                        busy && !input.trim() ? /* @__PURE__ */ jsx4("button", { className: "fc-send fc-stop", type: "button", onClick: stop, disabled: stopping, "aria-label": "Stop", title: "Stop", children: /* @__PURE__ */ jsx4("span", { className: "fc-stop-sq", "aria-hidden": true }) }) : /* @__PURE__ */ jsx4(
+                          "button",
+                          {
+                            className: "fc-send",
+                            type: "submit",
+                            disabled: !input.trim(),
+                            "aria-label": "Send",
+                            title: busy ? `${name} is still replying. Send now and it is answered next.` : "Send",
+                            children: "\u2192"
+                          }
+                        )
                       ]
                     }
                   )
