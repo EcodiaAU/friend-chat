@@ -24,9 +24,97 @@
   --fc-accent: #1a1a17;
   --fc-on-accent: #faf7f0;
 
+  /* Code + table chrome. Separated from --fc-surface so dark can sink a code block
+     BELOW the sheet instead of lifting it, which is what reads as code on a dark
+     surface and as a panel on a light one. */
+  --fc-code-bg: var(--fc-surface);
+  --fc-code-bar: transparent;
+  /* Quiet hover wash, so no rule has to hardcode an ink-tinted rgba() that inverts
+     into invisibility when the sheet goes dark. */
+  --fc-surface-2: rgba(26, 26, 23, 0.1);
+
   --fc-font: inherit;
   --fc-ease: cubic-bezier(0.16, 1, 0.3, 1);
   font-family: var(--fc-font);
+}
+
+/* ── Dark ────────────────────────────────────────────────────────────────────
+      Palette only: not one component knows this exists. Two ways in, and they
+      compose:
+
+        1. Explicit. Put data-fc-theme="dark" on the drawer's root or on ANY
+           ancestor (<html>, the app shell, a preview pane). An app with its own
+           theme switch drives the drawer from the same attribute it already sets.
+        2. Automatic. With no data-fc-theme anywhere, the drawer follows the
+           operating system via prefers-color-scheme.
+
+      data-fc-theme="light" pins light and beats the OS, because it is declared
+      after the media block at equal specificity. An app that has never heard of
+      this attribute keeps today's light drawer under a light OS, and picks up dark
+      under a dark OS, which is the behaviour a person expects from anything else
+      on their screen.
+
+      --fc-accent and --fc-on-accent are set as INLINE style by the component when
+      an app passes the accent prop, and inline always beats a stylesheet, so a
+      branded accent survives the theme switch untouched. The values below are only
+      the fallback for apps that pass no accent at all. ─────────────────────────── */
+.fc-root[data-fc-theme='dark'],
+[data-fc-theme='dark'] .fc-root {
+  --fc-ink: #f2efe8;
+  --fc-paper: #17171a;
+  --fc-cream: #1f1f23;
+  --fc-line: rgba(242, 239, 232, 0.16);
+  --fc-muted: rgba(242, 239, 232, 0.58);
+  --fc-surface: rgba(242, 239, 232, 0.08);
+  --fc-surface-2: rgba(242, 239, 232, 0.14);
+  --fc-code-bg: #0f0f11;
+  --fc-code-bar: rgba(242, 239, 232, 0.04);
+  /* The Friend signature is invariant: black tile, cream bar, white dot, in both
+     themes. It is the one thing that must not drift between apps or modes. */
+  --fc-tile: #000000;
+  --fc-mark-bar: #faf7f0;
+  --fc-mark-dot: #ffffff;
+  --fc-accent: #f2efe8;
+  --fc-on-accent: #17171a;
+}
+
+@media (prefers-color-scheme: dark) {
+  .fc-root:not([data-fc-theme='light']) {
+    --fc-ink: #f2efe8;
+    --fc-paper: #17171a;
+    --fc-cream: #1f1f23;
+    --fc-line: rgba(242, 239, 232, 0.16);
+    --fc-muted: rgba(242, 239, 232, 0.58);
+    --fc-surface: rgba(242, 239, 232, 0.08);
+    --fc-surface-2: rgba(242, 239, 232, 0.14);
+    --fc-code-bg: #0f0f11;
+    --fc-code-bar: rgba(242, 239, 232, 0.04);
+    --fc-tile: #000000;
+    --fc-mark-bar: #faf7f0;
+    --fc-mark-dot: #ffffff;
+    --fc-accent: #f2efe8;
+    --fc-on-accent: #17171a;
+  }
+}
+
+/* Declared AFTER the media block, at equal specificity, so an app that pins light
+   stays light under a dark OS. */
+.fc-root[data-fc-theme='light'],
+[data-fc-theme='light'] .fc-root {
+  --fc-ink: #1a1a17;
+  --fc-paper: #ffffff;
+  --fc-cream: #f7f6f3;
+  --fc-line: rgba(26, 26, 23, 0.12);
+  --fc-muted: rgba(26, 26, 23, 0.55);
+  --fc-surface: rgba(26, 26, 23, 0.05);
+  --fc-surface-2: rgba(26, 26, 23, 0.1);
+  --fc-code-bg: var(--fc-surface);
+  --fc-code-bar: transparent;
+  --fc-tile: #000000;
+  --fc-mark-bar: #faf7f0;
+  --fc-mark-dot: #ffffff;
+  --fc-accent: #1a1a17;
+  --fc-on-accent: #faf7f0;
 }
 
 /* ── FAB: identical black circle + cream bar + white dot (exported standalone for
@@ -213,7 +301,9 @@
   color: var(--fc-ink); cursor: pointer; text-align: left;
   transition: background 0.18s var(--fc-ease), transform 0.18s var(--fc-ease);
 }
-.fc-example:hover { background: rgba(26, 26, 23, 0.1); transform: translateY(-1px); }
+/* The one rule that used to hardcode an ink-tinted wash. On a dark sheet that value
+   is a smear of near-black on near-black, so the hover simply vanished. */
+.fc-example:hover { background: var(--fc-surface-2); transform: translateY(-1px); }
 
 /* One person turn: the bubble, plus the queued hint under it when the message was
    sent mid-reply. Carries the geometry .fc-you used to own so an ordinary turn is
