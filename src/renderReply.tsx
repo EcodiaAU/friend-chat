@@ -18,6 +18,12 @@ import * as React from 'react';
  */
 
 const URL_CORE = 'https?:\\/\\/[^\\s<>()\\[\\]]+[^\\s<>()\\[\\].,;:!?\'"]';
+// An in-app relative link target: a rooted path like /sites/<id>. Matched ONLY
+// inside an explicit [label](target); a bare "/foo" in prose stays plain text, so
+// this never turns a stray slash-word into a link. Lets a Friend hand back a
+// clickable link to a page inside its own app, not just an external https url.
+const REL_PATH = '\\/[^\\s)]+';
+const LINK_TARGET = '(?:' + URL_CORE + '|' + REL_PATH + ')';
 const IMG_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)(\?[^\s]*)?$/i;
 
 /** A URL that points at an image: by extension, or a known asset-store path. */
@@ -47,8 +53,17 @@ function imageNode(url: string, alt: string, key: React.Key): React.ReactNode {
 }
 
 function linkNode(url: string, text: string, key: React.Key): React.ReactNode {
+  // An in-app link (a rooted /path) navigates in place so the app's own routing
+  // and any surrounding chrome (e.g. a persistent chat drawer) can follow it; an
+  // external https link opens in a new tab so the conversation is not lost.
+  const internal = url.startsWith('/');
   return (
-    <a key={key} className="fc-link" href={url} target="_blank" rel="noopener noreferrer">
+    <a
+      key={key}
+      className="fc-link"
+      href={url}
+      {...(internal ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+    >
       {text}
     </a>
   );
@@ -58,7 +73,7 @@ function linkNode(url: string, text: string, key: React.Key): React.ReactNode {
 const INLINE_RE = new RegExp(
   [
     '!\\[([^\\]]*)\\]\\((' + URL_CORE + ')\\)', // 1 alt, 2 url   -> ![alt](url)
-    '\\[([^\\]]+)\\]\\((' + URL_CORE + ')\\)', // 3 text, 4 url  -> [text](url)
+    '\\[([^\\]]+)\\]\\((' + LINK_TARGET + ')\\)', // 3 text, 4 url  -> [text](url) or [text](/path)
     '`([^`]+)`', // 5 code
     '\\*\\*([^*]+)\\*\\*', // 6 bold
     '\\*([^*]+)\\*', // 7 italic

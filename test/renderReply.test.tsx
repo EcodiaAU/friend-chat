@@ -141,5 +141,19 @@ check('mixed list falls back to plain <ul>', !h27.includes('fc-tasks') && h27.in
 const h28 = html('- [ ] Ask about **the van**');
 check('task list: inline markup in an item', h28.includes('<strong>the van</strong>'), h28);
 
+// ── In-app relative links ──────────────────────────────────────────────────
+// 29. A markdown link to a rooted /path becomes a clickable in-app link with the
+// label, and (being internal) navigates in place rather than opening a new tab.
+const h29 = html('Here you go: [Open Resonaverde](/sites/40efb5f1-c996-40fc-974e-d2641faac26e)');
+check('relative link -> fc-link with label', h29.includes('class="fc-link"') && h29.includes('>Open Resonaverde<'), h29);
+check('relative link -> href is the /path', h29.includes('href="/sites/40efb5f1-c996-40fc-974e-d2641faac26e"'), h29);
+check('relative (internal) link is same-tab, not _blank', h29.includes('class="fc-link"') && !/fc-link[^>]*target="_blank"/.test(h29), h29);
+check('relative link: raw markdown brackets are gone', !h29.includes('[Open Resonaverde]'), h29);
+
+// 30. A bare "/path" in prose (no [label](...) wrapper) stays plain text - a
+// stray slash-word must never become a link.
+const h30 = html('Go to /sites/settings and flip the switch.');
+check('bare /path in prose stays plain text', !h30.includes('fc-link') && h30.includes('/sites/settings'), h30);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

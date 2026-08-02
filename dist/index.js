@@ -62,6 +62,8 @@ import { AnimatePresence, animate, motion as motion2, useDragControls, useMotion
 import * as React from "react";
 import { jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
 var URL_CORE = `https?:\\/\\/[^\\s<>()\\[\\]]+[^\\s<>()\\[\\].,;:!?'"]`;
+var REL_PATH = "\\/[^\\s)]+";
+var LINK_TARGET = "(?:" + URL_CORE + "|" + REL_PATH + ")";
 var IMG_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)(\?[^\s]*)?$/i;
 function isImageUrl(u) {
   return IMG_EXT.test(u) || /\/storage\/v1\/object\/(public|sign)\//.test(u) || /\/_next\/image\?/.test(u);
@@ -83,14 +85,24 @@ function imageNode(url, alt, key) {
   ] }, key);
 }
 function linkNode(url, text, key) {
-  return /* @__PURE__ */ jsx3("a", { className: "fc-link", href: url, target: "_blank", rel: "noopener noreferrer", children: text }, key);
+  const internal = url.startsWith("/");
+  return /* @__PURE__ */ jsx3(
+    "a",
+    {
+      className: "fc-link",
+      href: url,
+      ...internal ? {} : { target: "_blank", rel: "noopener noreferrer" },
+      children: text
+    },
+    key
+  );
 }
 var INLINE_RE = new RegExp(
   [
     "!\\[([^\\]]*)\\]\\((" + URL_CORE + ")\\)",
     // 1 alt, 2 url   -> ![alt](url)
-    "\\[([^\\]]+)\\]\\((" + URL_CORE + ")\\)",
-    // 3 text, 4 url  -> [text](url)
+    "\\[([^\\]]+)\\]\\((" + LINK_TARGET + ")\\)",
+    // 3 text, 4 url  -> [text](url) or [text](/path)
     "`([^`]+)`",
     // 5 code
     "\\*\\*([^*]+)\\*\\*",
