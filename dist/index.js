@@ -312,7 +312,8 @@ function FriendChat({
   seed,
   style,
   tabBottom = 116,
-  modal = true
+  modal = true,
+  onAttachImage
 }) {
   const reduce = useReducedMotion2();
   const dragControls = useDragControls();
@@ -320,6 +321,8 @@ function FriendChat({
   const [messages, setMessages] = React2.useState([]);
   const [input, setInput] = React2.useState("");
   const [busy, setBusy] = React2.useState(false);
+  const [attaching, setAttaching] = React2.useState(false);
+  const fileRef = React2.useRef(null);
   const abortRef = React2.useRef(null);
   const [stopping, setStopping] = React2.useState(false);
   function stop() {
@@ -568,6 +571,45 @@ function FriendChat({
                         void send(input);
                       },
                       children: [
+                        onAttachImage ? /* @__PURE__ */ jsxs3(Fragment2, { children: [
+                          /* @__PURE__ */ jsx4(
+                            "input",
+                            {
+                              ref: fileRef,
+                              type: "file",
+                              accept: "image/*",
+                              className: "fc-attach-input",
+                              onChange: async (e) => {
+                                const file = e.target.files?.[0];
+                                e.currentTarget.value = "";
+                                if (!file) return;
+                                setAttaching(true);
+                                try {
+                                  const url = await onAttachImage(file);
+                                  if (url) setInput((prev) => (prev ? prev.trimEnd() + " " : "") + url);
+                                } finally {
+                                  setAttaching(false);
+                                }
+                              }
+                            }
+                          ),
+                          /* @__PURE__ */ jsx4(
+                            "button",
+                            {
+                              type: "button",
+                              className: "fc-attach",
+                              onClick: () => fileRef.current?.click(),
+                              disabled: attaching,
+                              "aria-label": "Attach an image from your device",
+                              title: "Attach an image from your device",
+                              children: attaching ? /* @__PURE__ */ jsx4("span", { className: "fc-attach-dot", "aria-hidden": true }) : /* @__PURE__ */ jsxs3("svg", { width: "17", height: "17", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, children: [
+                                /* @__PURE__ */ jsx4("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }),
+                                /* @__PURE__ */ jsx4("circle", { cx: "8.5", cy: "8.5", r: "1.5" }),
+                                /* @__PURE__ */ jsx4("path", { d: "M21 15l-5-5L5 21" })
+                              ] })
+                            }
+                          )
+                        ] }) : null,
                         /* @__PURE__ */ jsx4(
                           "input",
                           {

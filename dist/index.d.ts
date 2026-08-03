@@ -151,6 +151,15 @@ interface FriendChatProps {
      * for a dialog and wrong for a side panel.
      */
     modal?: boolean;
+    /**
+     * Attach an image from the person's own device. When provided, the composer shows
+     * an attach button; on pick, the file is handed here to be uploaded (by the host,
+     * to the site's own storage), and the returned url is dropped into the composer so
+     * the Friend receives a real, durable link it can use in a repo/element/section
+     * edit. Return null to signal the upload failed. Omit the prop on a surface with no
+     * asset store, and the button is hidden.
+     */
+    onAttachImage?: (file: File) => Promise<string | null>;
 }
 /**
  * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
@@ -161,7 +170,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, modal, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, modal, onAttachImage, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply. */
 declare function renderReply(text: string): React.ReactNode;

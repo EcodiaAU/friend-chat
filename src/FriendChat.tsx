@@ -118,6 +118,15 @@ export interface FriendChatProps {
    * for a dialog and wrong for a side panel.
    */
   modal?: boolean;
+  /**
+   * Attach an image from the person's own device. When provided, the composer shows
+   * an attach button; on pick, the file is handed here to be uploaded (by the host,
+   * to the site's own storage), and the returned url is dropped into the composer so
+   * the Friend receives a real, durable link it can use in a repo/element/section
+   * edit. Return null to signal the upload failed. Omit the prop on a surface with no
+   * asset store, and the button is hidden.
+   */
+  onAttachImage?: (file: File) => Promise<string | null>;
 }
 
 type Msg = {
@@ -163,6 +172,7 @@ export function FriendChat({
   style,
   tabBottom = 116,
   modal = true,
+  onAttachImage,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
   const dragControls = useDragControls();
@@ -170,6 +180,10 @@ export function FriendChat({
   const [messages, setMessages] = React.useState<Msg[]>([]);
   const [input, setInput] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  // Device-image attach: a hidden file input the attach button opens, and a pending
+  // flag while the host uploads. The returned url is dropped into the composer.
+  const [attaching, setAttaching] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
   // Lets the person STOP a turn mid-flight: while busy the send button becomes a
   // stop button, and clicking it aborts the in-flight askStream (its fetch reader
   // rejects, caught below). One controller per turn.
@@ -515,6 +529,47 @@ export function FriendChat({
                   void send(input);
                 }}
               >
+                {/* Attach an image from the person's device: the host uploads it to the
+                    site's own storage and returns a durable url, which drops into the
+                    composer for the Friend to use. Hidden until a host wires onAttachImage. */}
+                {onAttachImage ? (
+                  <>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*"
+                      className="fc-attach-input"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.currentTarget.value = ''; // let the same file be picked again
+                        if (!file) return;
+                        setAttaching(true);
+                        try {
+                          const url = await onAttachImage(file);
+                          if (url) setInput((prev) => (prev ? prev.trimEnd() + ' ' : '') + url);
+                        } finally {
+                          setAttaching(false);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="fc-attach"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={attaching}
+                      aria-label="Attach an image from your device"
+                      title="Attach an image from your device"
+                    >
+                      {attaching ? <span className="fc-attach-dot" aria-hidden /> : (
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <path d="M21 15l-5-5L5 21" />
+                        </svg>
+                      )}
+                    </button>
+                  </>
+                ) : null}
                 {/* Never disabled, even mid-turn: the composer is how a message gets
                     queued, and a locked input is what made a mid-turn thought vanish. */}
                 <input
