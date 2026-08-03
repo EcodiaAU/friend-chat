@@ -289,6 +289,54 @@ function renderProse(text, si) {
   });
 }
 
+// src/turnWatchdog.ts
+function startTurnWatchdog(ctrl, stallMs, onStall) {
+  if (!(stallMs > 0)) return { bump() {
+  }, clear() {
+  } };
+  let timer = null;
+  let done = false;
+  const arm = () => {
+    if (done) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      timer = null;
+      onStall();
+      ctrl.abort();
+    }, stallMs);
+  };
+  arm();
+  return {
+    bump() {
+      arm();
+    },
+    clear() {
+      done = true;
+      if (timer) clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+function awaitOrAbort(p, signal) {
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      }
+    );
+  });
+}
+
 // src/FriendChat.tsx
 import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
 function FriendChat({
@@ -313,7 +361,8 @@ function FriendChat({
   style,
   tabBottom = 116,
   modal = true,
-  onAttachImage
+  onAttachImage,
+  turnStallMs = 6e4
 }) {
   const reduce = useReducedMotion2();
   const dragControls = useDragControls();
@@ -377,6 +426,9 @@ function FriendChat({
     transition: { duration: 0.18 }
   };
   const markTone = { barColor: "var(--fc-on-accent)", dotColor: "var(--fc-on-accent)" };
+  function unfreezeQueued() {
+    setMessages((m) => m.some((x) => x.queued) ? m.map((x) => x.queued ? { ...x, queued: false } : x) : m);
+  }
   async function send(text, fromQueue = false) {
     const msg = text.trim();
     if (!msg || !ask && !askStream) return;
@@ -398,25 +450,35 @@ function FriendChat({
     setStopping(false);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    let stalled = false;
+    const dog = startTurnWatchdog(ctrl, turnStallMs, () => {
+      stalled = true;
+    });
     try {
       let res;
       if (askStream) {
         let started = false;
-        res = await askStream(msg, (text2) => {
-          if (ctrl.signal.aborted) return;
-          setMessages((m) => {
-            if (!started) {
-              started = true;
-              return [...m, { role: "friend", text: text2 }];
-            }
-            const out = m.slice();
-            const last = out[out.length - 1];
-            if (last && last.role === "friend") out[out.length - 1] = { ...last, text: text2 };
-            return out;
-          });
-        });
+        res = await awaitOrAbort(
+          askStream(msg, (text2) => {
+            if (ctrl.signal.aborted) return;
+            dog.bump();
+            setMessages((m) => {
+              if (!started) {
+                started = true;
+                return [...m, { role: "friend", text: text2 }];
+              }
+              const out = m.slice();
+              const last = out[out.length - 1];
+              if (last && last.role === "friend") out[out.length - 1] = { ...last, text: text2 };
+              return out;
+            });
+          }, ctrl.signal),
+          ctrl.signal
+        );
+        dog.clear();
         if (!res.friend_connected) {
           queueRef.current = [];
+          unfreezeQueued();
           setDegraded(true);
           closeDrawer();
           return;
@@ -432,8 +494,11 @@ function FriendChat({
         });
         return;
       }
-      res = await ask(msg);
+      res = await awaitOrAbort(ask(msg), ctrl.signal);
+      dog.clear();
       if (!res.friend_connected) {
+        queueRef.current = [];
+        unfreezeQueued();
         setDegraded(true);
         closeDrawer();
         return;
@@ -442,7 +507,17 @@ function FriendChat({
       setMessages((m) => [...m, { role: "friend", text: res.reply ?? "...", extra: res.extra }]);
     } catch (err) {
       const aborted = ctrl.signal.aborted || err instanceof DOMException && err.name === "AbortError";
-      if (aborted) {
+      if (stalled) {
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          const line = `${name} went quiet just then. Try that again in a moment.`;
+          if (last && last.role === "friend" && !last.text.trim()) {
+            return [...m.slice(0, -1), { role: "friend", text: line }];
+          }
+          if (last && last.role === "friend") return m;
+          return [...m, { role: "friend", text: line }];
+        });
+      } else if (aborted) {
         setMessages((m) => {
           const last = m[m.length - 1];
           if (last && last.role === "friend") return m;
@@ -452,6 +527,7 @@ function FriendChat({
         setMessages((m) => [...m, { role: "friend", text: `I could not reach ${name} just then. Try again in a moment.` }]);
       }
     } finally {
+      dog.clear();
       busyRef.current = false;
       setBusy(false);
       setStopping(false);

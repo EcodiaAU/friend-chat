@@ -2,6 +2,7 @@ import * as React from 'react';
 import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'framer-motion';
 import { FriendMark } from './FriendMark';
 import { renderReply } from './renderReply';
+import { startTurnWatchdog, awaitOrAbort } from './turnWatchdog';
 
 export interface FriendAskResult {
   /** Authoritative (server-resolved) Friend connection for this turn. */
@@ -127,6 +128,16 @@ export interface FriendChatProps {
    * asset store, and the button is hidden.
    */
   onAttachImage?: (file: File) => Promise<string | null>;
+  /**
+   * How long (ms) a turn may show no sign of life (no streamed token, no resolve, no
+   * reject) before it is treated as a stalled engine and torn down: the turn settles,
+   * the person sees a quiet "went quiet, try again", and anything they queued behind it
+   * is answered rather than frozen. The Friend engine serialises turns per person, so a
+   * saturated engine can leave a socket silent forever; without this the whole chat
+   * freezes. A healthy long turn streams continuously and never trips it. Default 60000.
+   * Pass 0 to disable the guard.
+   */
+  turnStallMs?: number;
 }
 
 type Msg = {
@@ -173,6 +184,7 @@ export function FriendChat({
   tabBottom = 116,
   modal = true,
   onAttachImage,
+  turnStallMs = 60000,
 }: FriendChatProps) {
   const reduce = useReducedMotion();
   const dragControls = useDragControls();
@@ -259,6 +271,13 @@ export function FriendChat({
   };
   const markTone = { barColor: 'var(--fc-on-accent)', dotColor: 'var(--fc-on-accent)' };
 
+  // Strip the "queued" hint off any bubble still wearing it. Used when the queue is
+  // dropped (a disconnected transport) so no bubble is left on screen forever promising
+  // "answered next" for a message that will never be sent.
+  function unfreezeQueued() {
+    setMessages((m) => (m.some((x) => x.queued) ? m.map((x) => (x.queued ? { ...x, queued: false } : x)) : m));
+  }
+
   async function send(text: string, fromQueue = false) {
     const msg = text.trim();
     if (!msg || (!ask && !askStream)) return;
@@ -287,31 +306,49 @@ export function FriendChat({
     setStopping(false);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    // Guard this turn against an engine that goes silent and never settles. On stall
+    // the controller is aborted, which rejects the await below, runs the finally, and
+    // drains the queue rather than leaving the whole chat frozen. `stalled` lets the
+    // catch tell an engine stall apart from the person pressing Stop.
+    let stalled = false;
+    const dog = startTurnWatchdog(ctrl, turnStallMs, () => {
+      stalled = true;
+    });
     try {
       let res: FriendAskResult;
       if (askStream) {
         // A streaming turn: the reply bubble appears at the first token and grows,
         // so a long turn (a Friend actually building something) shows its work
         // instead of holding a silent spinner. The bubble is appended ONCE, on the
-        // first delta, then replaced in place.
+        // first delta, then replaced in place. The signal is handed to the transport
+        // so a stall or a Stop truly tears down its fetch, and each delta bumps the
+        // watchdog so a live turn is never mistaken for a hung one.
         let started = false;
-        res = await askStream(msg, (text) => {
-          if (ctrl.signal.aborted) return;
-          setMessages((m) => {
-            if (!started) {
-              started = true;
-              return [...m, { role: 'friend', text }];
-            }
-            const out = m.slice();
-            const last = out[out.length - 1];
-            if (last && last.role === 'friend') out[out.length - 1] = { ...last, text };
-            return out;
-          });
-        });
+        res = await awaitOrAbort(
+          askStream(msg, (text) => {
+            if (ctrl.signal.aborted) return;
+            dog.bump();
+            setMessages((m) => {
+              if (!started) {
+                started = true;
+                return [...m, { role: 'friend', text }];
+              }
+              const out = m.slice();
+              const last = out[out.length - 1];
+              if (last && last.role === 'friend') out[out.length - 1] = { ...last, text };
+              return out;
+            });
+          }, ctrl.signal),
+          ctrl.signal,
+        );
+        dog.clear();
         if (!res.friend_connected) {
           // The Friend is gone for this person: drop anything they had queued rather
-          // than firing it into a transport that just told us it cannot serve them.
+          // than firing it into a transport that just told us it cannot serve them,
+          // and un-freeze any bubbles still marked queued so none is left on screen
+          // promising an answer that will never come.
           queueRef.current = [];
+          unfreezeQueued();
           setDegraded(true);
           closeDrawer();
           return;
@@ -330,8 +367,13 @@ export function FriendChat({
         return;
       }
 
-      res = await ask!(msg);
+      // A bare `ask` cannot be cancelled, so race it against the abort: on stall or
+      // Stop the UI stops waiting and the turn settles even while the request runs on.
+      res = await awaitOrAbort(ask!(msg), ctrl.signal);
+      dog.clear();
       if (!res.friend_connected) {
+        queueRef.current = [];
+        unfreezeQueued();
         setDegraded(true);
         closeDrawer();
         return;
@@ -340,7 +382,19 @@ export function FriendChat({
       setMessages((m) => [...m, { role: 'friend', text: res.reply ?? '...', extra: res.extra }]);
     } catch (err) {
       const aborted = ctrl.signal.aborted || (err instanceof DOMException && err.name === 'AbortError');
-      if (aborted) {
+      if (stalled) {
+        // The engine went silent and the watchdog tore the turn down. Replace an empty
+        // partial bubble with a plain recovery line; keep any real text that did stream.
+        setMessages((m) => {
+          const last = m[m.length - 1];
+          const line = `${name} went quiet just then. Try that again in a moment.`;
+          if (last && last.role === 'friend' && !last.text.trim()) {
+            return [...m.slice(0, -1), { role: 'friend', text: line }];
+          }
+          if (last && last.role === 'friend') return m;
+          return [...m, { role: 'friend', text: line }];
+        });
+      } else if (aborted) {
         // The person stopped it. Keep whatever streamed so far; add a quiet marker
         // only if nothing had started.
         setMessages((m) => {
@@ -352,6 +406,7 @@ export function FriendChat({
         setMessages((m) => [...m, { role: 'friend', text: `I could not reach ${name} just then. Try again in a moment.` }]);
       }
     } finally {
+      dog.clear();
       busyRef.current = false;
       setBusy(false);
       setStopping(false);

@@ -10,7 +10,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const outdir = resolve(here, '.tmp');
 
-const entries = ['renderReply.test.tsx'];
+// turnWatchdog first: renderReply ends with process.exit(0) on success, which would
+// otherwise kill the runner before a later entry imports.
+const entries = ['turnWatchdog.test.tsx', 'renderReply.test.tsx'];
 
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });

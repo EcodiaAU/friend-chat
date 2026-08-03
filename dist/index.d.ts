@@ -160,6 +160,16 @@ interface FriendChatProps {
      * asset store, and the button is hidden.
      */
     onAttachImage?: (file: File) => Promise<string | null>;
+    /**
+     * How long (ms) a turn may show no sign of life (no streamed token, no resolve, no
+     * reject) before it is treated as a stalled engine and torn down: the turn settles,
+     * the person sees a quiet "went quiet, try again", and anything they queued behind it
+     * is answered rather than frozen. The Friend engine serialises turns per person, so a
+     * saturated engine can leave a socket silent forever; without this the whole chat
+     * freezes. A healthy long turn streams continuously and never trips it. Default 60000.
+     * Pass 0 to disable the guard.
+     */
+    turnStallMs?: number;
 }
 /**
  * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
@@ -170,7 +180,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, modal, onAttachImage, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, modal, onAttachImage, turnStallMs, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply. */
 declare function renderReply(text: string): React.ReactNode;
