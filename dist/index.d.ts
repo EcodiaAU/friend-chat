@@ -106,6 +106,16 @@ interface FriendChatProps {
      */
     headerActions?: React.ReactNode;
     /**
+     * Start a fresh conversation WITHOUT the person having to close and reopen the app.
+     * When provided (and no `headerActions` override), a "New chat" button shows in the
+     * header: pressing it aborts any in-flight turn, clears the visible transcript, and
+     * then calls this so the host can fork a clean engine session. The host keeps its
+     * own context (in Studio: the connected site and its data are untouched - only the
+     * chat history is shed), so this is a graceful reset, not a restart. Origin: Ryan @
+     * SeedTree asked for exactly this, 2026-08-10. Omit it and the header is unchanged.
+     */
+    onNewChat?: () => void | Promise<void>;
+    /**
      * Fires whenever the drawer opens or closes. An app whose body is expensive to
      * boot uses this to mount it on FIRST open rather than on every page load, and to
      * keep it mounted afterwards so the conversation survives a collapse.
@@ -180,7 +190,7 @@ interface FriendChatProps {
  * whose CTA goes straight to the native Friend SSO. Mount once at app scope; the
  * app owns route-based hiding (do not render it on marketing/auth surfaces).
  */
-declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onOpenChange, seed, style, tabBottom, modal, onAttachImage, turnStallMs, }: FriendChatProps): React.JSX.Element;
+declare function FriendChat({ app, connected, ask, askStream, onConnect, friendName: initialName, examples, placeholder, emptyLine, connectTitle, connectBody, accent, onAccent, renderExtra, renderBody, headerActions, onNewChat, onOpenChange, seed, style, tabBottom, modal, onAttachImage, turnStallMs, }: FriendChatProps): React.JSX.Element;
 
 /** Minimal, dependency-free rendering of a Friend reply. */
 declare function renderReply(text: string): React.ReactNode;

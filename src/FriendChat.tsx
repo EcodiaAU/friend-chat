@@ -78,6 +78,16 @@ export interface FriendChatProps {
    */
   headerActions?: React.ReactNode;
   /**
+   * Start a fresh conversation WITHOUT the person having to close and reopen the app.
+   * When provided (and no `headerActions` override), a "New chat" button shows in the
+   * header: pressing it aborts any in-flight turn, clears the visible transcript, and
+   * then calls this so the host can fork a clean engine session. The host keeps its
+   * own context (in Studio: the connected site and its data are untouched - only the
+   * chat history is shed), so this is a graceful reset, not a restart. Origin: Ryan @
+   * SeedTree asked for exactly this, 2026-08-10. Omit it and the header is unchanged.
+   */
+  onNewChat?: () => void | Promise<void>;
+  /**
    * Fires whenever the drawer opens or closes. An app whose body is expensive to
    * boot uses this to mount it on FIRST open rather than on every page load, and to
    * keep it mounted afterwards so the conversation survives a collapse.
@@ -178,6 +188,7 @@ export function FriendChat({
   renderExtra,
   renderBody,
   headerActions,
+  onNewChat,
   onOpenChange,
   seed,
   style,
@@ -205,6 +216,8 @@ export function FriendChat({
     setStopping(true);
     abortRef.current?.abort();
   }
+  // Guards a double-press of "New chat" while the host forks the engine session.
+  const [resetting, setResetting] = React.useState(false);
   // Messages sent while a turn was still streaming, fired in order as each turn
   // settles. A ref, not state: the drain runs inside the finishing turn's own
   // `finally`, where a `busy` read off state would still be the stale `true` from
@@ -214,6 +227,29 @@ export function FriendChat({
   const [name, setName] = React.useState(initialName);
   const [degraded, setDegraded] = React.useState(false);
   const streamRef = React.useRef<HTMLDivElement>(null);
+
+  // Fresh conversation without a full restart. Abort any in-flight turn, drop the
+  // queue, clear the visible transcript, then let the host fork a clean engine
+  // session (keeping ITS context - e.g. Studio's connected site). Best-effort: even
+  // if the host fork fails, the person still gets a cleared view to start over in.
+  async function handleNewChat() {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      abortRef.current?.abort();
+      queueRef.current = [];
+      busyRef.current = false;
+      setBusy(false);
+      setStopping(false);
+      setInput('');
+      setMessages([]);
+      await onNewChat?.();
+    } catch {
+      /* a failed fork still leaves a cleared view the person can start over in */
+    } finally {
+      setResetting(false);
+    }
+  }
 
   React.useEffect(() => setName(initialName), [initialName]);
   React.useEffect(() => {
@@ -503,14 +539,24 @@ export function FriendChat({
               <span className="fc-head-sub">{headSub}</span>
             </div>
             {!showConnect &&
-              (headerActions ?? (
-                <button
-                  className="fc-head-friend"
-                  onClick={() => window.open('https://friend.ecodia.au', '_blank')}
-                >
-                  Friend
-                </button>
-              ))}
+              (headerActions ??
+                (onNewChat ? (
+                  <button
+                    className="fc-head-friend"
+                    onClick={handleNewChat}
+                    disabled={resetting}
+                    title="Start a fresh chat. Your work is kept - only the conversation is cleared."
+                  >
+                    {resetting ? 'Starting...' : 'New chat'}
+                  </button>
+                ) : (
+                  <button
+                    className="fc-head-friend"
+                    onClick={() => window.open('https://friend.ecodia.au', '_blank')}
+                  >
+                    Friend
+                  </button>
+                )))}
             <button className="fc-head-x" onClick={closeDrawer} aria-label="Close">
               ×
             </button>

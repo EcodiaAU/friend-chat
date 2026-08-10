@@ -356,6 +356,7 @@ function FriendChat({
   renderExtra,
   renderBody,
   headerActions,
+  onNewChat,
   onOpenChange,
   seed,
   style,
@@ -378,11 +379,29 @@ function FriendChat({
     setStopping(true);
     abortRef.current?.abort();
   }
+  const [resetting, setResetting] = React2.useState(false);
   const queueRef = React2.useRef([]);
   const busyRef = React2.useRef(false);
   const [name, setName] = React2.useState(initialName);
   const [degraded, setDegraded] = React2.useState(false);
   const streamRef = React2.useRef(null);
+  async function handleNewChat() {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      abortRef.current?.abort();
+      queueRef.current = [];
+      busyRef.current = false;
+      setBusy(false);
+      setStopping(false);
+      setInput("");
+      setMessages([]);
+      await onNewChat?.();
+    } catch {
+    } finally {
+      setResetting(false);
+    }
+  }
   React2.useEffect(() => setName(initialName), [initialName]);
   React2.useEffect(() => {
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" });
@@ -594,14 +613,23 @@ function FriendChat({
                     /* @__PURE__ */ jsx4("span", { className: "fc-head-name", children: headName }),
                     /* @__PURE__ */ jsx4("span", { className: "fc-head-sub", children: headSub })
                   ] }),
-                  !showConnect && (headerActions ?? /* @__PURE__ */ jsx4(
+                  !showConnect && (headerActions ?? (onNewChat ? /* @__PURE__ */ jsx4(
+                    "button",
+                    {
+                      className: "fc-head-friend",
+                      onClick: handleNewChat,
+                      disabled: resetting,
+                      title: "Start a fresh chat. Your work is kept - only the conversation is cleared.",
+                      children: resetting ? "Starting..." : "New chat"
+                    }
+                  ) : /* @__PURE__ */ jsx4(
                     "button",
                     {
                       className: "fc-head-friend",
                       onClick: () => window.open("https://friend.ecodia.au", "_blank"),
                       children: "Friend"
                     }
-                  )),
+                  ))),
                   /* @__PURE__ */ jsx4("button", { className: "fc-head-x", onClick: closeDrawer, "aria-label": "Close", children: "\xD7" })
                 ] }),
                 showConnect ? /* @__PURE__ */ jsxs3("div", { className: "fc-connect-body", children: [
