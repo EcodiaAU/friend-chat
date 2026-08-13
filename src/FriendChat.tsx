@@ -163,6 +163,43 @@ type Msg = {
 };
 
 /**
+ * One Friend bubble, MEMOISED. renderReply walks the whole reply (segment + a regex
+ * inline pass over every line) on each call; before this, one token of a live turn
+ * re-ran that parse for EVERY bubble in the transcript, not just the growing one, so a
+ * long conversation re-parsed O(bubbles x tokens) times and juddered. Memoising means a
+ * settled bubble (stable text) never re-parses while a later turn streams; only the one
+ * live bubble does. The comparator keys on text + extra + active only: renderExtra is a
+ * pure formatter of `extra`, so its identity (an inline arrow in Studio, new each render)
+ * is deliberately ignored - comparing it would defeat the memo entirely. `active` is the
+ * live tail pulse on the still-streaming bubble, so a silent tool phase (the text frozen
+ * for seconds while the Friend is writing files or deploying) still reads as alive, not
+ * hung. That is the visible half of the "tool-status going dark" fix; the transport that
+ * feeds the changing tool label is the other half.
+ */
+const FriendBubble = React.memo(
+  function FriendBubble({
+    text,
+    extra,
+    active,
+    renderExtra,
+  }: {
+    text: string;
+    extra?: unknown;
+    active?: boolean;
+    renderExtra?: (extra: unknown) => React.ReactNode;
+  }) {
+    return (
+      <div className="fc-friend">
+        {renderReply(text)}
+        {renderExtra && extra != null ? renderExtra(extra) : null}
+        {active ? <span className="fc-livedot" aria-hidden /> : null}
+      </div>
+    );
+  },
+  (a, b) => a.text === b.text && a.extra === b.extra && a.active === b.active,
+);
+
+/**
  * The unified Ecodia Friend side-drawer. Not a floating blob: the Friend lives at
  * the right edge as a slim black tab (cream bar + white dot) and is physically
  * pulled out into a right-anchored sheet. One identical interaction across every
@@ -252,8 +289,44 @@ export function FriendChat({
   }
 
   React.useEffect(() => setName(initialName), [initialName]);
+
+  // ── Stick-to-bottom, not yank-to-bottom ─────────────────────────────────────
+  // The old effect force-smooth-scrolled to the end on EVERY token (messages changes
+  // once per streamed delta). Two costs: it dragged a person who had scrolled up to
+  // re-read the reply straight back down mid-read, and it kicked off a fresh smooth
+  // animation per token so the transcript juddered against itself. Now we follow the
+  // stream ONLY while the person is already pinned to the bottom, and snap instantly
+  // (no per-token animation). When they are reading further up and new content lands,
+  // a quiet "jump to latest" appears instead of stealing their scroll.
+  const atBottomRef = React.useRef(true);
+  const [showJump, setShowJump] = React.useState(false);
+  const isNearBottom = React.useCallback(() => {
+    const el = streamRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
+  const onStreamScroll = React.useCallback(() => {
+    const near = isNearBottom();
+    atBottomRef.current = near;
+    if (near) setShowJump(false);
+  }, [isNearBottom]);
+  const jumpToLatest = React.useCallback(() => {
+    const el = streamRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+    atBottomRef.current = true;
+    setShowJump(false);
+  }, [reduce]);
   React.useEffect(() => {
-    streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: 'smooth' });
+    const el = streamRef.current;
+    if (!el) return;
+    if (atBottomRef.current) {
+      el.scrollTop = el.scrollHeight; // instant: no per-token smooth animation to fight
+      if (showJump) setShowJump(false);
+    } else {
+      setShowJump(true); // new content arrived while they were reading up-thread
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, busy]);
 
   // ── Edge-drawer geometry + drag ─────────────────────────────────────────────
@@ -583,7 +656,7 @@ export function FriendChat({
             <div className="fc-body">{renderBody()}</div>
           ) : (
             <>
-              <div className="fc-stream" ref={streamRef}>
+              <div className="fc-stream" ref={streamRef} onScroll={onStreamScroll}>
                 {messages.length === 0 && !busy && (
                   <div className="fc-empty">
                     <p className="fc-empty-line">{emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.`}</p>
@@ -609,13 +682,21 @@ export function FriendChat({
                       ) : null}
                     </div>
                   ) : (
-                    <div key={i} className="fc-friend">
-                      {renderReply(m.text)}
-                      {renderExtra && m.extra != null ? renderExtra(m.extra) : null}
-                    </div>
+                    <FriendBubble
+                      key={i}
+                      text={m.text}
+                      extra={m.extra}
+                      active={busy && i === messages.length - 1}
+                      renderExtra={renderExtra}
+                    />
                   ),
                 )}
-                {busy && (
+                {/* The standalone thinking dots show ONLY before this turn's Friend
+                    bubble exists (a bare `ask` turn, or the gap before the first delta
+                    of a stream). Once a streaming bubble is on screen it carries its own
+                    live tail pulse, so a second empty dots bubble underneath it was pure
+                    redundant chrome (the "empty 3-dot bubble" report). */}
+                {busy && messages[messages.length - 1]?.role !== 'friend' && (
                   <div className="fc-friend fc-thinking" aria-live="polite">
                     <span className="fc-dot" />
                     <span className="fc-dot" />
@@ -623,6 +704,14 @@ export function FriendChat({
                   </div>
                 )}
               </div>
+              {/* Jump to latest: appears only when the person has scrolled up to re-read
+                  and new content has landed below. Never steals their scroll; one tap
+                  returns them to the live end. */}
+              {showJump && (
+                <button type="button" className="fc-jump" onClick={jumpToLatest} aria-label="Jump to latest">
+                  <span className="fc-jump-arrow" aria-hidden>↓</span> Latest
+                </button>
+              )}
               <form
                 className="fc-compose"
                 onSubmit={(e) => {

@@ -339,6 +339,21 @@ function awaitOrAbort(p, signal) {
 
 // src/FriendChat.tsx
 import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
+var FriendBubble = React2.memo(
+  function FriendBubble2({
+    text,
+    extra,
+    active,
+    renderExtra
+  }) {
+    return /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
+      renderReply(text),
+      renderExtra && extra != null ? renderExtra(extra) : null,
+      active ? /* @__PURE__ */ jsx4("span", { className: "fc-livedot", "aria-hidden": true }) : null
+    ] });
+  },
+  (a, b) => a.text === b.text && a.extra === b.extra && a.active === b.active
+);
 function FriendChat({
   app,
   connected,
@@ -403,8 +418,34 @@ function FriendChat({
     }
   }
   React2.useEffect(() => setName(initialName), [initialName]);
+  const atBottomRef = React2.useRef(true);
+  const [showJump, setShowJump] = React2.useState(false);
+  const isNearBottom = React2.useCallback(() => {
+    const el = streamRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
+  const onStreamScroll = React2.useCallback(() => {
+    const near = isNearBottom();
+    atBottomRef.current = near;
+    if (near) setShowJump(false);
+  }, [isNearBottom]);
+  const jumpToLatest = React2.useCallback(() => {
+    const el = streamRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+    atBottomRef.current = true;
+    setShowJump(false);
+  }, [reduce]);
   React2.useEffect(() => {
-    streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" });
+    const el = streamRef.current;
+    if (!el) return;
+    if (atBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      if (showJump) setShowJump(false);
+    } else {
+      setShowJump(true);
+    }
   }, [messages, busy]);
   const drawerX = useMotionValue(360);
   const [sheetW, setSheetW] = React2.useState(360);
@@ -646,7 +687,7 @@ function FriendChat({
                   // one federated Friend drawer.
                   /* @__PURE__ */ jsx4("div", { className: "fc-body", children: renderBody() })
                 ) : /* @__PURE__ */ jsxs3(Fragment2, { children: [
-                  /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, children: [
+                  /* @__PURE__ */ jsxs3("div", { className: "fc-stream", ref: streamRef, onScroll: onStreamScroll, children: [
                     messages.length === 0 && !busy && /* @__PURE__ */ jsxs3("div", { className: "fc-empty", children: [
                       /* @__PURE__ */ jsx4("p", { className: "fc-empty-line", children: emptyLine ?? `I am ${name}, here with you in ${app}. Ask me anything.` }),
                       examples.length > 0 && /* @__PURE__ */ jsx4("div", { className: "fc-examples", children: examples.map((ex) => /* @__PURE__ */ jsx4("button", { className: "fc-example", onClick: () => send(ex), children: ex }, ex)) })
@@ -655,16 +696,26 @@ function FriendChat({
                       (m, i) => m.role === "you" ? /* @__PURE__ */ jsxs3("div", { className: "fc-turn", children: [
                         /* @__PURE__ */ jsx4("div", { className: "fc-you", children: m.text }),
                         m.queued ? /* @__PURE__ */ jsx4("div", { className: "fc-queued", "aria-live": "polite", children: "queued: answered next" }) : null
-                      ] }, i) : /* @__PURE__ */ jsxs3("div", { className: "fc-friend", children: [
-                        renderReply(m.text),
-                        renderExtra && m.extra != null ? renderExtra(m.extra) : null
-                      ] }, i)
+                      ] }, i) : /* @__PURE__ */ jsx4(
+                        FriendBubble,
+                        {
+                          text: m.text,
+                          extra: m.extra,
+                          active: busy && i === messages.length - 1,
+                          renderExtra
+                        },
+                        i
+                      )
                     ),
-                    busy && /* @__PURE__ */ jsxs3("div", { className: "fc-friend fc-thinking", "aria-live": "polite", children: [
+                    busy && messages[messages.length - 1]?.role !== "friend" && /* @__PURE__ */ jsxs3("div", { className: "fc-friend fc-thinking", "aria-live": "polite", children: [
                       /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
                       /* @__PURE__ */ jsx4("span", { className: "fc-dot" }),
                       /* @__PURE__ */ jsx4("span", { className: "fc-dot" })
                     ] })
+                  ] }),
+                  showJump && /* @__PURE__ */ jsxs3("button", { type: "button", className: "fc-jump", onClick: jumpToLatest, "aria-label": "Jump to latest", children: [
+                    /* @__PURE__ */ jsx4("span", { className: "fc-jump-arrow", "aria-hidden": true, children: "\u2193" }),
+                    " Latest"
                   ] }),
                   /* @__PURE__ */ jsxs3(
                     "form",
