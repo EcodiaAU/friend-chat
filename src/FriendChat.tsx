@@ -4,6 +4,25 @@ import { FriendMark } from './FriendMark';
 import { renderReply } from './renderReply';
 import { startTurnWatchdog, awaitOrAbort } from './turnWatchdog';
 
+/**
+ * The slice of the Web Speech API this composer uses. Declared locally because the
+ * global `SpeechRecognition` lib types are not in this package's TS lib target; the
+ * API is still feature-detected at runtime, so an absent implementation just hides
+ * the mic.
+ */
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onstart: (() => void) | null;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 export interface FriendAskResult {
   /** Authoritative (server-resolved) Friend connection for this turn. */
   friend_connected: boolean;
@@ -244,6 +263,53 @@ export function FriendChat({
   // flag while the host uploads. The returned url is dropped into the composer.
   const [attaching, setAttaching] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
+  // The composer is a multi-line textarea that grows with the text up to a few
+  // lines, then scrolls internally. A single-line input pushed everything but the
+  // tail off to the left so you could not see what you were writing.
+  const taRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const autosize = React.useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, []);
+  // Dictation: the browser Web Speech API, feature-detected. Absent in webviews
+  // that do not implement it, in which case the mic simply does not render (no dead
+  // button). Speaking appends onto whatever is already typed.
+  const SpeechRec: (new () => SpeechRecognitionLike) | undefined =
+    typeof window !== 'undefined'
+      ? ((window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ??
+         (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition)
+      : undefined;
+  const speechSupported = !!SpeechRec;
+  const recognitionRef = React.useRef<SpeechRecognitionLike | null>(null);
+  const [listening, setListening] = React.useState(false);
+  const toggleDictation = React.useCallback(() => {
+    if (!SpeechRec) return;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* already stopping */ }
+      return;
+    }
+    const rec = new SpeechRec();
+    rec.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-AU';
+    rec.interimResults = true;
+    rec.continuous = false;
+    let base = '';
+    rec.onstart = () => { base = input ? `${input.trimEnd()} ` : ''; setListening(true); };
+    rec.onresult = (e) => {
+      let txt = '';
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      setInput(base + txt);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => { setListening(false); recognitionRef.current = null; };
+    recognitionRef.current = rec;
+    try { rec.start(); } catch { setListening(false); recognitionRef.current = null; }
+  }, [SpeechRec, input]);
+  React.useEffect(() => () => { try { recognitionRef.current?.abort(); } catch { /* noop */ } }, []);
+  // Re-fit the textarea height whenever the text changes, including programmatic
+  // sets (seed, an attached image url, a dictated phrase), not just keystrokes.
+  React.useEffect(() => { autosize(); }, [input, autosize]);
   // Lets the person STOP a turn mid-flight: while busy the send button becomes a
   // stop button, and clicking it aborts the in-flight askStream (its fetch reader
   // rejects, caught below). One controller per turn.
@@ -390,6 +456,9 @@ export function FriendChat({
   async function send(text: string, fromQueue = false) {
     const msg = text.trim();
     if (!msg || (!ask && !askStream)) return;
+    // Sending closes an open dictation so the mic does not keep listening into the
+    // next message.
+    if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch { /* already stopping */ } }
     if (busyRef.current && !fromQueue) {
       // QUEUE, never drop. A message typed while the Friend is still replying lands
       // in the transcript straight away with a quiet queued hint and is held here;
@@ -760,12 +829,41 @@ export function FriendChat({
                     </button>
                   </>
                 ) : null}
+                {/* Dictation: speak instead of type. Only rendered when the browser
+                    exposes the Web Speech API, so a webview without it shows no dead
+                    button. Toggling it on appends onto whatever is already typed. */}
+                {speechSupported ? (
+                  <button
+                    type="button"
+                    className={`fc-mic${listening ? ' fc-mic-on' : ''}`}
+                    onClick={toggleDictation}
+                    aria-label={listening ? 'Stop dictation' : 'Dictate your message'}
+                    aria-pressed={listening}
+                    title={listening ? 'Stop dictation' : 'Speak to type'}
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <rect x="9" y="2.5" width="6" height="11.5" rx="3" />
+                      <path d="M5 11a7 7 0 0 0 14 0" />
+                      <path d="M12 18v3.5" />
+                    </svg>
+                  </button>
+                ) : null}
                 {/* Never disabled, even mid-turn: the composer is how a message gets
-                    queued, and a locked input is what made a mid-turn thought vanish. */}
-                <input
+                    queued, and a locked input is what made a mid-turn thought vanish.
+                    A textarea, not an input: it grows to a few lines so you can see
+                    what you are writing. Enter sends; Shift+Enter makes a new line. */}
+                <textarea
+                  ref={taRef}
                   className="fc-input"
                   value={input}
+                  rows={1}
                   onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim()) void send(input);
+                    }
+                  }}
                   placeholder={placeholder ?? `Ask ${name}...`}
                   autoComplete="off"
                 />

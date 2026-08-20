@@ -503,22 +503,45 @@
 }
 
 .fc-compose {
-  display: flex; gap: 8px; align-items: center;
+  display: flex; gap: 8px; align-items: flex-end;
   padding: 12px; border-top: 1px solid var(--fc-line);
   flex: 0 0 auto; background: var(--fc-paper);
 }
+/* A multi-line, auto-growing composer. At one line it reads as the old pill (42px
+   tall, 21px radius); it grows with the text up to a few lines, then scrolls
+   inside. The buttons bottom-align to it (fc-compose align-items: flex-end). */
 .fc-input {
   flex: 1; min-width: 0;
   background: var(--fc-surface);
   border: 1px solid var(--fc-line);
-  border-radius: 999px; padding: 11px 15px;
-  font: inherit; font-weight: 500; font-size: 15px;
+  border-radius: 21px; padding: 10px 15px;
+  font: inherit; font-weight: 500; font-size: 15px; line-height: 1.4;
   color: var(--fc-ink); outline: none;
+  resize: none; min-height: 42px; max-height: 132px; overflow-y: auto;
   transition: border-color 0.2s var(--fc-ease), background 0.2s var(--fc-ease);
 }
 .fc-input::placeholder { color: var(--fc-muted); }
 .fc-input:focus { border-color: var(--fc-ink); background: var(--fc-paper); }
 .fc-input:disabled { opacity: 0.6; }
+
+/* Dictation mic: a quiet secondary control like the attach button; when listening
+   it fills with the accent and pulses so it is clear the mic is live. */
+.fc-mic {
+  width: 42px; height: 42px; flex: 0 0 auto;
+  border-radius: 999px; border: 1px solid var(--fc-line);
+  background: var(--fc-surface); color: var(--fc-muted);
+  cursor: pointer; display: grid; place-items: center;
+  transition: color 0.18s, border-color 0.18s, background 0.18s, transform 0.18s var(--fc-ease);
+}
+.fc-mic:hover { color: var(--fc-ink); border-color: var(--fc-ink); transform: translateY(-1px); }
+.fc-mic-on {
+  background: var(--fc-accent); color: var(--fc-on-accent); border-color: transparent;
+  animation: fc-mic-pulse 1.3s var(--fc-ease) infinite;
+}
+@keyframes fc-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+  50% { box-shadow: 0 0 0 4px var(--fc-line); }
+}
 .fc-send {
   width: 42px; height: 42px; flex: 0 0 auto;
   border-radius: 999px; border: none; background: var(--fc-accent); color: var(--fc-on-accent);

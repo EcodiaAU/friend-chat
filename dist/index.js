@@ -388,6 +388,62 @@ function FriendChat({
   const [busy, setBusy] = React2.useState(false);
   const [attaching, setAttaching] = React2.useState(false);
   const fileRef = React2.useRef(null);
+  const taRef = React2.useRef(null);
+  const autosize = React2.useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, []);
+  const SpeechRec = typeof window !== "undefined" ? window.SpeechRecognition ?? window.webkitSpeechRecognition : void 0;
+  const speechSupported = !!SpeechRec;
+  const recognitionRef = React2.useRef(null);
+  const [listening, setListening] = React2.useState(false);
+  const toggleDictation = React2.useCallback(() => {
+    if (!SpeechRec) return;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+      }
+      return;
+    }
+    const rec = new SpeechRec();
+    rec.lang = typeof navigator !== "undefined" && navigator.language || "en-AU";
+    rec.interimResults = true;
+    rec.continuous = false;
+    let base = "";
+    rec.onstart = () => {
+      base = input ? `${input.trimEnd()} ` : "";
+      setListening(true);
+    };
+    rec.onresult = (e) => {
+      let txt = "";
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      setInput(base + txt);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+      recognitionRef.current = null;
+    }
+  }, [SpeechRec, input]);
+  React2.useEffect(() => () => {
+    try {
+      recognitionRef.current?.abort();
+    } catch {
+    }
+  }, []);
+  React2.useEffect(() => {
+    autosize();
+  }, [input, autosize]);
   const abortRef = React2.useRef(null);
   const [stopping, setStopping] = React2.useState(false);
   function stop() {
@@ -492,6 +548,12 @@ function FriendChat({
   async function send(text, fromQueue = false) {
     const msg = text.trim();
     if (!msg || !ask && !askStream) return;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+      }
+    }
     if (busyRef.current && !fromQueue) {
       queueRef.current = [...queueRef.current, { text: msg }];
       setMessages((m) => [...m, { role: "you", text: msg, queued: true }]);
@@ -765,12 +827,36 @@ function FriendChat({
                             }
                           )
                         ] }) : null,
-                        /* @__PURE__ */ jsx4(
-                          "input",
+                        speechSupported ? /* @__PURE__ */ jsx4(
+                          "button",
                           {
+                            type: "button",
+                            className: `fc-mic${listening ? " fc-mic-on" : ""}`,
+                            onClick: toggleDictation,
+                            "aria-label": listening ? "Stop dictation" : "Dictate your message",
+                            "aria-pressed": listening,
+                            title: listening ? "Stop dictation" : "Speak to type",
+                            children: /* @__PURE__ */ jsxs3("svg", { width: "17", height: "17", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, children: [
+                              /* @__PURE__ */ jsx4("rect", { x: "9", y: "2.5", width: "6", height: "11.5", rx: "3" }),
+                              /* @__PURE__ */ jsx4("path", { d: "M5 11a7 7 0 0 0 14 0" }),
+                              /* @__PURE__ */ jsx4("path", { d: "M12 18v3.5" })
+                            ] })
+                          }
+                        ) : null,
+                        /* @__PURE__ */ jsx4(
+                          "textarea",
+                          {
+                            ref: taRef,
                             className: "fc-input",
                             value: input,
+                            rows: 1,
                             onChange: (e) => setInput(e.target.value),
+                            onKeyDown: (e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                if (input.trim()) void send(input);
+                              }
+                            },
                             placeholder: placeholder ?? `Ask ${name}...`,
                             autoComplete: "off"
                           }
