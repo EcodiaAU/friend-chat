@@ -524,11 +524,14 @@ export function FriendChat({
           // The Friend is gone for this person: drop anything they had queued rather
           // than firing it into a transport that just told us it cannot serve them,
           // and un-freeze any bubbles still marked queued so none is left on screen
-          // promising an answer that will never come.
+          // promising an answer that will never come. Keep the drawer OPEN and flip to
+          // degraded: showConnect turns true, so the connect-nudge renders in place, right
+          // where the person is already looking. The old code called closeDrawer() here,
+          // which slammed the sheet shut and took the one explanation for the failed send
+          // with it. Closing stays reachable via the header X and the edge tab.
           queueRef.current = [];
           unfreezeQueued();
           setDegraded(true);
-          closeDrawer();
           return;
         }
         if (res.friendName) setName(res.friendName);
@@ -550,10 +553,11 @@ export function FriendChat({
       res = await awaitOrAbort(ask!(msg), ctrl.signal);
       dog.clear();
       if (!res.friend_connected) {
+        // Same as the streaming path: keep the drawer open and show the connect-nudge in
+        // place rather than closeDrawer()-ing the one explanation for the failed send away.
         queueRef.current = [];
         unfreezeQueued();
         setDegraded(true);
-        closeDrawer();
         return;
       }
       if (res.friendName) setName(res.friendName);

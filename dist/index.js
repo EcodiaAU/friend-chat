@@ -602,7 +602,6 @@ function FriendChat({
           queueRef.current = [];
           unfreezeQueued();
           setDegraded(true);
-          closeDrawer();
           return;
         }
         if (res.friendName) setName(res.friendName);
@@ -622,7 +621,6 @@ function FriendChat({
         queueRef.current = [];
         unfreezeQueued();
         setDegraded(true);
-        closeDrawer();
         return;
       }
       if (res.friendName) setName(res.friendName);
