@@ -47,6 +47,18 @@ interface FriendAskResult {
      */
     extra?: unknown;
 }
+/**
+ * Non-text signs of life a streaming transport can report. `onDelta` only fires on
+ * WORDS, and a turn spends most of its life not saying any: a tool frame, a thinking
+ * token, or a server heartbeat all mean the turn is alive while the text stays frozen.
+ * A transport that sees those should call `alive()` on each one, or the stall guard is
+ * judging the turn on the one signal it cannot produce mid-tool. Optional and additive:
+ * a transport that ignores it behaves exactly as before.
+ */
+interface TurnLife {
+    /** Call on any frame from the engine, text or not. Re-arms the stall guard. */
+    alive: () => void;
+}
 interface FriendChatProps {
     /** Room name, e.g. "Locals". Drives the subtitle "here with you in Locals". */
     app: string;
@@ -65,7 +77,7 @@ interface FriendChatProps {
      * rather than holding a silent spinner for a minute. Apps that pass `ask` are
      * unchanged: same drawer, same UI, one brain.
      */
-    askStream?: (message: string, onDelta: (textSoFar: string) => void, signal?: AbortSignal) => Promise<FriendAskResult>;
+    askStream?: (message: string, onDelta: (textSoFar: string) => void, signal?: AbortSignal, life?: TurnLife) => Promise<FriendAskResult>;
     /**
      * Take the person straight into this app's Friend SSO. Wire this to the native
      * in-app system SSO sheet (@ecodia/friend-auth connectFriend on Capacitor, web
@@ -171,13 +183,19 @@ interface FriendChatProps {
      */
     onAttachImage?: (file: File) => Promise<string | null>;
     /**
-     * How long (ms) a turn may show no sign of life (no streamed token, no resolve, no
-     * reject) before it is treated as a stalled engine and torn down: the turn settles,
-     * the person sees a quiet "went quiet, try again", and anything they queued behind it
-     * is answered rather than frozen. The Friend engine serialises turns per person, so a
-     * saturated engine can leave a socket silent forever; without this the whole chat
-     * freezes. A healthy long turn streams continuously and never trips it. Default 60000.
-     * Pass 0 to disable the guard.
+     * How long (ms) a turn may show no sign of life (no frame via `TurnLife.alive`, no
+     * streamed token, no resolve, no reject) before it is treated as a stalled engine and
+     * torn down: the turn settles, the person sees a quiet "went quiet, try again", and
+     * anything they queued behind it is answered rather than frozen. The Friend engine
+     * serialises turns per person, so a saturated engine can leave a socket silent
+     * forever; without this the whole chat freezes.
+     *
+     * The old default was 60000 on the belief that a healthy long turn streams
+     * continuously. It does not. A tool call emits a frame at its start and another when
+     * it lands, nothing between, and one measured Friend turn ran 87.3 seconds of total
+     * silence while working normally. So the default is now well clear of real tool work,
+     * and the sharp signal comes from a transport wiring `TurnLife.alive` rather than from
+     * a tight clock. Default 300000. Pass 0 to disable the guard.
      */
     turnStallMs?: number;
 }

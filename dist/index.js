@@ -378,7 +378,7 @@ function FriendChat({
   tabBottom = 116,
   modal = true,
   onAttachImage,
-  turnStallMs = 6e4
+  turnStallMs = 3e5
 }) {
   const reduce = useReducedMotion2();
   const dragControls = useDragControls();
@@ -594,7 +594,9 @@ function FriendChat({
               if (last && last.role === "friend") out[out.length - 1] = { ...last, text: text2 };
               return out;
             });
-          }, ctrl.signal),
+          }, ctrl.signal, { alive: () => {
+            if (!ctrl.signal.aborted) dog.bump();
+          } }),
           ctrl.signal
         );
         dog.clear();

@@ -20,6 +20,28 @@ function check(name: string, cond: boolean, detail = '') {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function run() {
+  // 0. SILENCE IS NOT DEATH (2026-08-26). A turn that emits no WORDS for a long stretch
+  //    is the normal shape of tool work, not a dead turn: one measured Friend turn ran
+  //    87.3s of total silence while working. The guard must survive that when the
+  //    transport reports non-text frames, and must still fire when nothing at all comes.
+  {
+    const ctrl = new AbortController();
+    let stalled = false;
+    const dog = startTurnWatchdog(ctrl, 60, () => {
+      stalled = true;
+    });
+    // Frames arriving with no text at all, the way a tool phase reports itself.
+    for (let i = 0; i < 5; i++) {
+      await sleep(30);
+      dog.bump();
+    }
+    check('a wordless turn survives past the stall window on frames alone', !stalled && !ctrl.signal.aborted);
+    // ...and a turn that goes truly silent still gets torn down, so the freeze fix holds.
+    await sleep(110);
+    check('a turn with NO frames at all still stalls', stalled && ctrl.signal.aborted);
+    dog.clear();
+  }
+
   // 1. A silent turn is torn down: onStall fires and the controller aborts. THIS is
   //    the freeze fix: without it the awaiting turn would hang and pin `busy` forever.
   {

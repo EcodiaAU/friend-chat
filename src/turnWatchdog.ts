@@ -13,7 +13,7 @@
 
 /** Handle over a running turn's stall timer. */
 export interface TurnWatchdog {
-  /** Call on each sign of life (a streamed delta). Re-arms the stall timer. */
+  /** Call on ANY sign of life, not only a streamed word. Re-arms the stall timer. */
   bump(): void;
   /** The turn settled; stop the timer. Idempotent, and blocks any pending fire. */
   clear(): void;
@@ -23,9 +23,17 @@ export interface TurnWatchdog {
  * Arm a stall watchdog for one turn. If the turn shows no sign of life for `stallMs`
  * (no `bump()` and no `clear()`), `onStall` fires and the controller is aborted, which
  * rejects the awaiting transport, runs the turn's `finally`, releases `busy`, and
- * drains the held queue. A healthy long turn (a Friend actually building something)
- * streams tokens the whole way and keeps bumping, so it never trips; only a genuinely
- * silent turn does. `stallMs <= 0` disables the guard (returns inert no-ops).
+ * drains the held queue. `stallMs <= 0` disables the guard (returns inert no-ops).
+ *
+ * WHAT COUNTS AS LIFE. This used to say a healthy long turn streams tokens the whole
+ * way, so only a dead turn goes quiet. That is false, and it cost the Friend web chat
+ * real answers before it was caught (2026-08-26): a model emits a tool frame when a
+ * call starts and another when it lands, so a search, a page read, or a delegated
+ * helper produces NO text for its entire duration. One measured Friend turn ran 87.3
+ * seconds without a single frame and was still working. So `bump()` must be called on
+ * every frame a transport sees, text or not, and `stallMs` must exceed the longest
+ * thing the Friend legitimately does in silence. Doctrine:
+ * backend/patterns/silence-is-not-death-streaming-turn-watchdogs-2026-08-26.md
  */
 export function startTurnWatchdog(
   ctrl: AbortController,
