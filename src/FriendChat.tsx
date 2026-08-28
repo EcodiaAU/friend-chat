@@ -32,7 +32,7 @@ export interface FriendAskResult {
   reply?: string;
   /**
    * Opaque per-app payload for this reply, rendered by `renderExtra` under the
-   * friend bubble. The component never inspects it. Glovebox uses it to carry
+   * friend bubble. The component never inspects it. A host app uses it to carry
    * web/call/map/save action pills; apps that pass no `renderExtra` ignore it.
    */
   extra?: unknown;
@@ -52,7 +52,7 @@ export interface TurnLife {
 }
 
 export interface FriendChatProps {
-  /** Room name, e.g. "Locals". Drives the subtitle "here with you in Locals". */
+  /** Room name, e.g. "Studio". Drives the subtitle "here with you in Studio". */
   app: string;
   /** Whether the person has connected their Friend. false shows the connect-to-buy nudge. */
   connected: boolean;
@@ -94,7 +94,7 @@ export interface FriendChatProps {
   onAccent?: string;
   /**
    * Optional render-prop for the opaque `extra` a reply carries, drawn under the
-   * friend bubble (e.g. Glovebox's action pills). Only invoked when `extra` is
+   * friend bubble (e.g. a host app's action pills). Only invoked when `extra` is
    * non-null, so apps that omit it keep the plain-text reply unchanged.
    */
   renderExtra?: (extra: unknown) => React.ReactNode;

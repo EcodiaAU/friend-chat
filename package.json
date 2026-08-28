@@ -1,7 +1,7 @@
 {
   "name": "@ecodia/friend-chat",
   "version": "1.8.0",
-  "description": "The unified Ecodia Friend floating chat: one identical FAB + one chat design across Locals, Chambers, Glovebox, Studio. Transport is injected per app.",
+  "description": "The unified Ecodia Friend floating chat: one identical FAB + one chat design across the Ecodia apps. Transport is injected per app.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

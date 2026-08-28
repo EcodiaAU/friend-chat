@@ -1,7 +1,7 @@
 # @ecodia/friend-chat
 
 The one Ecodia Friend drawer. A slim tab at the right edge of the screen that pulls
-out into a sheet, identical across Locals, Chambers, Glovebox, Studio and the wedge
+out into a sheet, identical across Studio and the wedge
 apps. Each app passes only its own context: the transport, the room name, the accent.
 The Friend signature (black tile, cream bar, white dot) and all geometry and motion
 are invariant, on purpose. A person who has met the Friend in one app has met it in
@@ -18,7 +18,7 @@ import { FriendChat } from '@ecodia/friend-chat';
 import '@ecodia/friend-chat/styles.css';
 
 <FriendChat
-  app="Locals"
+  app="Studio"
   connected={hasFriend}
   askStream={askStream}
   onConnect={openFriendSSO}

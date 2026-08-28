@@ -233,7 +233,7 @@
 }
 .fc-tab:active { cursor: grabbing; }
 /* Host-proof geometry at (0,2,0): app-shell tap-target floors like
-   `.glovebox-shell button { min-width: 44px }` are (0,1,1) and would otherwise
+   `.host-shell button { min-width: 44px }` are (0,1,1) and would otherwise
    out-specify .fc-tab and silently widen it, breaking the fleet-identical tab. */
 .fc-root .fc-tab {
   min-width: 0;
