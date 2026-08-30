@@ -339,6 +339,11 @@ function awaitOrAbort(p, signal) {
 
 // src/FriendChat.tsx
 import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
+function getSpeechRec() {
+  if (typeof window === "undefined") return void 0;
+  const w = window;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
+}
 var FriendBubble = React2.memo(
   function FriendBubble2({
     text,
@@ -395,11 +400,14 @@ function FriendChat({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
   }, []);
-  const SpeechRec = typeof window !== "undefined" ? window.SpeechRecognition ?? window.webkitSpeechRecognition : void 0;
-  const speechSupported = !!SpeechRec;
+  const [speechSupported, setSpeechSupported] = React2.useState(false);
+  React2.useEffect(() => {
+    setSpeechSupported(!!getSpeechRec());
+  }, []);
   const recognitionRef = React2.useRef(null);
   const [listening, setListening] = React2.useState(false);
   const toggleDictation = React2.useCallback(() => {
+    const SpeechRec = getSpeechRec();
     if (!SpeechRec) return;
     if (recognitionRef.current) {
       try {
@@ -434,7 +442,7 @@ function FriendChat({
       setListening(false);
       recognitionRef.current = null;
     }
-  }, [SpeechRec, input]);
+  }, [input]);
   React2.useEffect(() => () => {
     try {
       recognitionRef.current?.abort();

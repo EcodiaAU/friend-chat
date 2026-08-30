@@ -145,7 +145,7 @@
   position: fixed;
   inset: 0;
   /* Themable stacking: apps with their own overlay ladders set --fc-z on the root
-     (e.g. Adventure sits the drawer under its trip modal). Scrim rides 5 below. */
+     (e.g. a host app sits the drawer under its own modal). Scrim rides 5 below. */
   z-index: calc(var(--fc-z, 70) - 5);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
@@ -233,7 +233,7 @@
 }
 .fc-tab:active { cursor: grabbing; }
 /* Host-proof geometry at (0,2,0): app-shell tap-target floors like
-   `.glovebox-shell button { min-width: 44px }` are (0,1,1) and would otherwise
+   `.host-shell button { min-width: 44px }` are (0,1,1) and would otherwise
    out-specify .fc-tab and silently widen it, breaking the fleet-identical tab. */
 .fc-root .fc-tab {
   min-width: 0;
