@@ -23,6 +23,17 @@ interface SpeechRecognitionLike {
   abort(): void;
 }
 
+/** The Web Speech constructor under either name, or undefined off a browser. Read at
+ *  CALL time and inside an effect, never during render: see the note in the composer. */
+function getSpeechRec(): (new () => SpeechRecognitionLike) | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition;
+}
+
 export interface FriendAskResult {
   /** Authoritative (server-resolved) Friend connection for this turn. */
   friend_connected: boolean;
@@ -300,15 +311,27 @@ export function FriendChat({
   // Dictation: the browser Web Speech API, feature-detected. Absent in webviews
   // that do not implement it, in which case the mic simply does not render (no dead
   // button). Speaking appends onto whatever is already typed.
-  const SpeechRec: (new () => SpeechRecognitionLike) | undefined =
-    typeof window !== 'undefined'
-      ? ((window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ??
-         (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition)
-      : undefined;
-  const speechSupported = !!SpeechRec;
+  //
+  // THE DETECTION RUNS IN AN EFFECT, NOT IN RENDER, AND THAT IS THE WHOLE POINT
+  // (2026-08-30). It used to read window during render, which every server has to
+  // answer `false` and every real browser answers `true`, so the client's FIRST
+  // render disagreed with the server's HTML by one whole button. React calls that a
+  // hydration failure (#418) and its recovery is to throw the server tree away and
+  // regenerate the page on the client. Measured on studio.ecodia.au: #418 on every
+  // route that mounts this drawer and on no route that does not, including two
+  // routes with no app chrome at all, so the drawer was the predictor. The blast
+  // radius was not the mic. The regeneration re-creates from the document root, and
+  // that drops whatever a pre-hydration head script wrote onto <html>, so Studio's
+  // theme attributes were erased on every signed-in load and everyone who had ever
+  // chosen a theme got the default back. A capability the server cannot know must
+  // therefore start at the server's answer and be corrected after mount, which costs
+  // one frame without the mic and nothing else.
+  const [speechSupported, setSpeechSupported] = React.useState(false);
+  React.useEffect(() => { setSpeechSupported(!!getSpeechRec()); }, []);
   const recognitionRef = React.useRef<SpeechRecognitionLike | null>(null);
   const [listening, setListening] = React.useState(false);
   const toggleDictation = React.useCallback(() => {
+    const SpeechRec = getSpeechRec();
     if (!SpeechRec) return;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch { /* already stopping */ }
@@ -329,7 +352,7 @@ export function FriendChat({
     rec.onend = () => { setListening(false); recognitionRef.current = null; };
     recognitionRef.current = rec;
     try { rec.start(); } catch { setListening(false); recognitionRef.current = null; }
-  }, [SpeechRec, input]);
+  }, [input]);
   React.useEffect(() => () => { try { recognitionRef.current?.abort(); } catch { /* noop */ } }, []);
   // Re-fit the textarea height whenever the text changes, including programmatic
   // sets (seed, an attached image url, a dictated phrase), not just keystrokes.
