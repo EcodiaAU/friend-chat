@@ -4,6 +4,9 @@
 // that decide whether a paste becomes an upload, whether a normal text paste survives
 // it, and what a person is told when an upload fails. Pure, so no DOM.
 // Run: node test/run.mjs
+import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import {
   appendUrl,
   carriesText,
@@ -255,6 +258,49 @@ async function run() {
   {
     check('a null payload yields no images', imagesFrom(null).length === 0 && imagesFrom(undefined).length === 0);
     check('a null payload is never swallowed', !shouldSwallowPaste(null));
+  }
+
+  // 18. EXACTLY ONE PASTE INGEST PATH IN THE COMPONENT.
+  //
+  // This is a source fence rather than a behaviour test, and it is here because the
+  // assertions above CANNOT catch what it catches. Measured on the deployed app
+  // 2026-09-17: the composer had a React onPaste on the panel AND a window paste
+  // listener, both correct, both ingesting, so ONE pasted screenshot made TWO
+  // uploads and put TWO urls in the composer. Every pure assertion above passed
+  // throughout, because the duplication was two handlers each de-duplicating
+  // correctly once. Only a count of the handlers sees it.
+  //
+  // The window listener is the one that survives, because it is a superset: a React
+  // handler on the panel never fires when focus is still on <body>, which is
+  // exactly the person who has just opened the drawer and hit paste.
+  {
+    // The bundled test runs out of test/.tmp, so import.meta.url is the wrong
+    // anchor. Walk up from cwd until src/FriendChat.tsx is found, and FAIL rather
+    // than silently pass if it never is.
+    let srcPath = '';
+    for (let dir = process.cwd(), i = 0; i < 5; i++) {
+      const candidate = join(dir, 'src/FriendChat.tsx');
+      if (existsSync(candidate)) { srcPath = candidate; break; }
+      const up = dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+    check('the component source is findable (else this fence proves nothing)', srcPath !== '');
+    const src = srcPath ? await readFile(srcPath, 'utf8') : '';
+    const reactHandlers = src.match(/onPaste=\{/g) ?? [];
+    const windowListeners = src.match(/addEventListener\(\s*'paste'/g) ?? [];
+    check('the component has NO React onPaste (it would double every paste)', reactHandlers.length === 0, `found ${reactHandlers.length}`);
+    check('the component has exactly ONE window paste listener', windowListeners.length === 1, `found ${windowListeners.length}`);
+    // CONTROL: the patterns catch what they claim to, so a rename cannot make this
+    // fence pass by matching nothing.
+    check(
+      'CONTROL: the onPaste pattern matches a real handler',
+      (`<div onPaste={(e) => {}}>`.match(/onPaste=\{/g) ?? []).length === 1,
+    );
+    check(
+      'CONTROL: the listener pattern matches a real registration',
+      (`window.addEventListener('paste', h, true)`.match(/addEventListener\(\s*'paste'/g) ?? []).length === 1,
+    );
   }
 
   console.log(`\nimageIngest: ${pass} passed, ${fail} failed`);

@@ -419,12 +419,24 @@ export function FriendChat({
     [onAttachImage, ingestFiles],
   );
 
-  // A paste only reaches a React handler when the focused element is inside the
-  // subtree. Someone who has just opened the drawer and hits paste without clicking
-  // into the composer first has focus on <body>, and that event never reaches the
-  // panel. This window listener covers exactly that case and NOTHING else: a paste
-  // aimed at any editable element outside the drawer is left completely alone, so
-  // the host page's own inputs keep their clipboard.
+  // ONE paste listener, on window, and that is deliberate (2026-09-17).
+  //
+  // A React onPaste on the panel cannot be the whole answer: it only fires when the
+  // focused element is inside the subtree, and someone who has just opened the
+  // drawer and hits paste without clicking into the composer first has focus on
+  // <body>, so that event never reaches the panel at all. That is the exact person
+  // this feature exists for.
+  //
+  // But having BOTH is worse than having either. Measured on the deployed app
+  // before this comment existed: a panel onPaste AND this listener both ran for one
+  // paste, so one pasted screenshot made TWO uploads and put TWO urls in the
+  // composer. The pure-module de-duplication could not see it, because the
+  // duplication was two handlers each ingesting correctly once. So the window
+  // listener is the only ingest path, and it covers both cases.
+  //
+  // It is also deliberately narrow: a paste aimed at any editable element OUTSIDE
+  // the drawer is left completely alone, so the host page's own inputs keep their
+  // clipboard. Capture phase, so nothing between can stop it reaching here.
   const drawerRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (!open || !onAttachImage || typeof window === 'undefined') return;
@@ -441,8 +453,8 @@ export function FriendChat({
       }
       onPasteEvent(e.clipboardData, () => e.preventDefault());
     };
-    window.addEventListener('paste', handler);
-    return () => window.removeEventListener('paste', handler);
+    window.addEventListener('paste', handler, true);
+    return () => window.removeEventListener('paste', handler, true);
   }, [open, onAttachImage, onPasteEvent]);
 
   // DROP. Cheap once paste exists, and a person told to "attach or paste" reaches for
@@ -840,7 +852,6 @@ export function FriendChat({
           role="dialog"
           aria-modal={modal ? true : undefined}
           aria-label={headName}
-          onPaste={(e) => { onPasteEvent(e.clipboardData, () => e.preventDefault()); }}
           onDragOver={onDragOverPanel}
           onDragLeave={(e) => { if (e.currentTarget === e.target) setDropActive(false); }}
           onDrop={onDropPanel}

@@ -593,8 +593,8 @@ function FriendChat({
       }
       onPasteEvent(e.clipboardData, () => e.preventDefault());
     };
-    window.addEventListener("paste", handler);
-    return () => window.removeEventListener("paste", handler);
+    window.addEventListener("paste", handler, true);
+    return () => window.removeEventListener("paste", handler, true);
   }, [open, onAttachImage, onPasteEvent]);
   const onDragOverPanel = React2.useCallback(
     (e) => {
@@ -883,9 +883,6 @@ function FriendChat({
               role: "dialog",
               "aria-modal": modal ? true : void 0,
               "aria-label": headName,
-              onPaste: (e) => {
-                onPasteEvent(e.clipboardData, () => e.preventDefault());
-              },
               onDragOver: onDragOverPanel,
               onDragLeave: (e) => {
                 if (e.currentTarget === e.target) setDropActive(false);
