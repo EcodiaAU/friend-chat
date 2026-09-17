@@ -337,6 +337,102 @@ function awaitOrAbort(p, signal) {
   });
 }
 
+// src/imageIngest.ts
+function isImage(f) {
+  return !!f && typeof f.type === "string" && f.type.startsWith("image/");
+}
+function fingerprint(f) {
+  return `${f.name ?? ""} ${f.type ?? ""} ${f.size ?? -1}`;
+}
+function imagesFrom(dt) {
+  if (!dt) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const take = (f) => {
+    if (!isImage(f)) return;
+    const key = fingerprint(f);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(f);
+  };
+  const items = dt.items;
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it) continue;
+      if (it.kind && it.kind !== "file") continue;
+      if (typeof it.getAsFile !== "function") continue;
+      take(it.getAsFile());
+    }
+  }
+  const files = dt.files;
+  if (files) {
+    for (let i = 0; i < files.length; i++) take(files[i]);
+  }
+  return out;
+}
+function carriesText(dt) {
+  if (!dt) return false;
+  const types = dt.types;
+  const named = types ? Array.from(types) : [];
+  const hasTextType = named.some((t) => t === "text/plain" || t === "text/html" || t === "text/uri-list");
+  if (!hasTextType) return false;
+  if (typeof dt.getData === "function") {
+    for (const t of ["text/plain", "text/uri-list", "text/html"]) {
+      if (!named.includes(t)) continue;
+      let v = "";
+      try {
+        v = dt.getData(t) || "";
+      } catch {
+        return true;
+      }
+      if (v.trim()) return true;
+    }
+    return false;
+  }
+  return true;
+}
+function shouldSwallowPaste(dt) {
+  return imagesFrom(dt).length > 0 && !carriesText(dt);
+}
+function appendUrl(prev, url) {
+  const head = (prev ?? "").trimEnd();
+  return head ? `${head} ${url}` : url;
+}
+function failureMessage(failed, total) {
+  if (failed <= 0) return "";
+  if (total === 1) return "That image did not upload. Try again, or use the attach button.";
+  if (failed === total) return `None of those ${total} images uploaded. Try again, or use the attach button.`;
+  return `${failed} of those ${total} images did not upload. Try again, or use the attach button.`;
+}
+async function ingestImages(files, deps) {
+  if (!files.length) return { ok: 0, failed: 0 };
+  deps.onStart?.();
+  deps.onPending(1);
+  let ok = 0;
+  let failed = 0;
+  try {
+    for (const file of files) {
+      let url = null;
+      try {
+        url = await deps.upload(file);
+      } catch {
+        url = null;
+      }
+      if (url) {
+        ok++;
+        deps.onUrl(url);
+      } else {
+        failed++;
+      }
+    }
+  } finally {
+    deps.onPending(-1);
+  }
+  if (failed > 0) deps.onError(failureMessage(failed, files.length));
+  return { ok, failed };
+}
+
 // src/FriendChat.tsx
 import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs3 } from "react/jsx-runtime";
 function getSpeechRec() {
@@ -391,7 +487,10 @@ function FriendChat({
   const [messages, setMessages] = React2.useState([]);
   const [input, setInput] = React2.useState("");
   const [busy, setBusy] = React2.useState(false);
-  const [attaching, setAttaching] = React2.useState(false);
+  const [attachPending, setAttachPending] = React2.useState(0);
+  const attaching = attachPending > 0;
+  const [attachError, setAttachError] = React2.useState("");
+  const [dropActive, setDropActive] = React2.useState(false);
   const fileRef = React2.useRef(null);
   const taRef = React2.useRef(null);
   const autosize = React2.useCallback(() => {
@@ -452,6 +551,72 @@ function FriendChat({
   React2.useEffect(() => {
     autosize();
   }, [input, autosize]);
+  const ingestFiles = React2.useCallback(
+    async (files) => {
+      if (!onAttachImage || !files.length) return;
+      await ingestImages(files, {
+        upload: onAttachImage,
+        onPending: (d) => setAttachPending((n) => Math.max(0, n + d)),
+        onUrl: (url) => setInput((prev) => appendUrl(prev, url)),
+        onError: (msg) => setAttachError(msg),
+        onStart: () => setAttachError("")
+      });
+      try {
+        taRef.current?.focus();
+      } catch {
+      }
+    },
+    [onAttachImage]
+  );
+  const onPasteEvent = React2.useCallback(
+    (dt, preventDefault) => {
+      if (!onAttachImage) return false;
+      const files = imagesFrom(dt);
+      if (!files.length) return false;
+      if (shouldSwallowPaste(dt)) preventDefault();
+      void ingestFiles(files);
+      return true;
+    },
+    [onAttachImage, ingestFiles]
+  );
+  const drawerRef = React2.useRef(null);
+  React2.useEffect(() => {
+    if (!open || !onAttachImage || typeof window === "undefined") return;
+    const handler = (e) => {
+      const target = e.target;
+      const inDrawer = !!(target && drawerRef.current?.contains(target));
+      if (!inDrawer) {
+        const el = target;
+        const tag = el?.tagName;
+        const editable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable === true;
+        if (editable) return;
+      }
+      onPasteEvent(e.clipboardData, () => e.preventDefault());
+    };
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+  }, [open, onAttachImage, onPasteEvent]);
+  const onDragOverPanel = React2.useCallback(
+    (e) => {
+      if (!onAttachImage) return;
+      const types = e.dataTransfer?.types;
+      if (types && !Array.from(types).includes("Files")) return;
+      e.preventDefault();
+      setDropActive(true);
+    },
+    [onAttachImage]
+  );
+  const onDropPanel = React2.useCallback(
+    (e) => {
+      if (!onAttachImage) return;
+      const files = imagesFrom(e.dataTransfer);
+      setDropActive(false);
+      if (!files.length) return;
+      e.preventDefault();
+      void ingestFiles(files);
+    },
+    [onAttachImage, ingestFiles]
+  );
   const abortRef = React2.useRef(null);
   const [stopping, setStopping] = React2.useState(false);
   function stop() {
@@ -713,10 +878,19 @@ function FriendChat({
           /* @__PURE__ */ jsxs3(
             "div",
             {
-              className: "fc-drawer-inner",
+              ref: drawerRef,
+              className: `fc-drawer-inner${dropActive ? " fc-dropping" : ""}`,
               role: "dialog",
               "aria-modal": modal ? true : void 0,
               "aria-label": headName,
+              onPaste: (e) => {
+                onPasteEvent(e.clipboardData, () => e.preventDefault());
+              },
+              onDragOver: onDragOverPanel,
+              onDragLeave: (e) => {
+                if (e.currentTarget === e.target) setDropActive(false);
+              },
+              onDrop: onDropPanel,
               children: [
                 /* @__PURE__ */ jsxs3("header", { className: "fc-head", children: [
                   /* @__PURE__ */ jsx4("span", { className: "fc-head-mark", children: /* @__PURE__ */ jsx4(FriendMark, { size: 20, ...markTone }) }),
@@ -787,6 +961,7 @@ function FriendChat({
                     /* @__PURE__ */ jsx4("span", { className: "fc-jump-arrow", "aria-hidden": true, children: "\u2193" }),
                     " Latest"
                   ] }),
+                  attachError ? /* @__PURE__ */ jsx4("div", { className: "fc-attach-error", role: "status", "aria-live": "polite", children: attachError }) : null,
                   /* @__PURE__ */ jsxs3(
                     "form",
                     {
@@ -803,18 +978,13 @@ function FriendChat({
                               ref: fileRef,
                               type: "file",
                               accept: "image/*",
+                              multiple: true,
                               className: "fc-attach-input",
-                              onChange: async (e) => {
-                                const file = e.target.files?.[0];
+                              onChange: (e) => {
+                                const picked = Array.from(e.target.files ?? []);
                                 e.currentTarget.value = "";
-                                if (!file) return;
-                                setAttaching(true);
-                                try {
-                                  const url = await onAttachImage(file);
-                                  if (url) setInput((prev) => (prev ? prev.trimEnd() + " " : "") + url);
-                                } finally {
-                                  setAttaching(false);
-                                }
+                                if (!picked.length) return;
+                                void ingestFiles(picked);
                               }
                             }
                           ),
@@ -826,7 +996,7 @@ function FriendChat({
                               onClick: () => fileRef.current?.click(),
                               disabled: attaching,
                               "aria-label": "Attach an image from your device",
-                              title: "Attach an image from your device",
+                              title: "Attach an image, or just paste or drag one in",
                               children: attaching ? /* @__PURE__ */ jsx4("span", { className: "fc-attach-dot", "aria-hidden": true }) : /* @__PURE__ */ jsxs3("svg", { width: "17", height: "17", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, children: [
                                 /* @__PURE__ */ jsx4("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }),
                                 /* @__PURE__ */ jsx4("circle", { cx: "8.5", cy: "8.5", r: "1.5" }),
@@ -858,7 +1028,10 @@ function FriendChat({
                             className: "fc-input",
                             value: input,
                             rows: 1,
-                            onChange: (e) => setInput(e.target.value),
+                            onChange: (e) => {
+                              setInput(e.target.value);
+                              if (attachError) setAttachError("");
+                            },
                             onKeyDown: (e) => {
                               if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault();

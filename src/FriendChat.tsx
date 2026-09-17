@@ -3,6 +3,13 @@ import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useR
 import { FriendMark } from './FriendMark';
 import { renderReply } from './renderReply';
 import { startTurnWatchdog, awaitOrAbort } from './turnWatchdog';
+import {
+  appendUrl,
+  imagesFrom,
+  ingestImages,
+  shouldSwallowPaste,
+  type DataTransferLike,
+} from './imageIngest';
 
 /**
  * The slice of the Web Speech API this composer uses. Declared locally because the
@@ -294,9 +301,22 @@ export function FriendChat({
   const [messages, setMessages] = React.useState<Msg[]>([]);
   const [input, setInput] = React.useState('');
   const [busy, setBusy] = React.useState(false);
-  // Device-image attach: a hidden file input the attach button opens, and a pending
-  // flag while the host uploads. The returned url is dropped into the composer.
-  const [attaching, setAttaching] = React.useState(false);
+  // Device-image attach: a hidden file input the attach button opens, plus PASTE and
+  // DROP into the panel, all three routed through the one host upload. The returned
+  // url is dropped into the composer.
+  //
+  // A COUNTER, not a boolean (2026-09-17). A person told to "paste your images" pastes
+  // twice in quick succession; with a flag the first batch settling would unstick the
+  // pending state while the second was still uploading, and the attach button would go
+  // live mid-upload.
+  const [attachPending, setAttachPending] = React.useState(0);
+  const attaching = attachPending > 0;
+  // A failed upload MUST say so. Silence on failure is how the original bug reached
+  // the founder: the person attached, nothing appeared, and nothing told them why.
+  const [attachError, setAttachError] = React.useState('');
+  // Drop affordance: the panel highlights while a file is dragged over it, so a person
+  // who was told to "attach or paste" and reaches for drag instead sees a target.
+  const [dropActive, setDropActive] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   // The composer is a multi-line textarea that grows with the text up to a few
   // lines, then scrolls internally. A single-line input pushed everything but the
@@ -357,6 +377,98 @@ export function FriendChat({
   // Re-fit the textarea height whenever the text changes, including programmatic
   // sets (seed, an attached image url, a dictated phrase), not just keystrokes.
   React.useEffect(() => { autosize(); }, [input, autosize]);
+
+  // THE ONE INGEST PATH. The attach button, a paste and a drop all land here, so
+  // they cannot drift apart: same host upload, same pending counter, same failure
+  // line, same "drop the url into the composer" behaviour. The rules about WHICH
+  // items count and WHEN a paste may be swallowed live in ./imageIngest, which is
+  // pure and directly tested.
+  const ingestFiles = React.useCallback(
+    async (files: readonly File[]) => {
+      if (!onAttachImage || !files.length) return;
+      await ingestImages(files, {
+        upload: onAttachImage,
+        onPending: (d) => setAttachPending((n) => Math.max(0, n + d)),
+        onUrl: (url) => setInput((prev) => appendUrl(prev, url)),
+        onError: (msg) => setAttachError(msg),
+        onStart: () => setAttachError(''),
+      });
+      // Put the caret back where they were typing, so the next thing they say does
+      // not need a click to get there.
+      try { taRef.current?.focus(); } catch { /* noop */ }
+    },
+    [onAttachImage],
+  );
+
+  // PASTE. The Friend says "attach or paste" all the time and until 2026-09-17 this
+  // package had no paste-in path at all, so on a surface with no attach button the
+  // invitation was unanswerable and a client's images simply never arrived.
+  //
+  // A plain text paste is never disturbed: shouldSwallowPaste is true only for an
+  // image-only payload, and a mixed paste (text plus an image, which is what copying
+  // a block out of a web page produces) pastes its text natively AND ingests the image.
+  const onPasteEvent = React.useCallback(
+    (dt: DataTransferLike | null | undefined, preventDefault: () => void): boolean => {
+      if (!onAttachImage) return false;
+      const files = imagesFrom(dt);
+      if (!files.length) return false;
+      if (shouldSwallowPaste(dt)) preventDefault();
+      void ingestFiles(files);
+      return true;
+    },
+    [onAttachImage, ingestFiles],
+  );
+
+  // A paste only reaches a React handler when the focused element is inside the
+  // subtree. Someone who has just opened the drawer and hits paste without clicking
+  // into the composer first has focus on <body>, and that event never reaches the
+  // panel. This window listener covers exactly that case and NOTHING else: a paste
+  // aimed at any editable element outside the drawer is left completely alone, so
+  // the host page's own inputs keep their clipboard.
+  const drawerRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!open || !onAttachImage || typeof window === 'undefined') return;
+    const handler = (e: ClipboardEvent) => {
+      const target = e.target as Node | null;
+      const inDrawer = !!(target && drawerRef.current?.contains(target));
+      if (!inDrawer) {
+        const el = target as HTMLElement | null;
+        const tag = el?.tagName;
+        const editable =
+          tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable === true;
+        // Someone typing into the host page keeps their paste, always.
+        if (editable) return;
+      }
+      onPasteEvent(e.clipboardData, () => e.preventDefault());
+    };
+    window.addEventListener('paste', handler);
+    return () => window.removeEventListener('paste', handler);
+  }, [open, onAttachImage, onPasteEvent]);
+
+  // DROP. Cheap once paste exists, and a person told to "attach or paste" reaches for
+  // drag just as readily. dragover MUST be cancelled or the browser navigates away to
+  // the dropped file and the whole chat is gone.
+  const onDragOverPanel = React.useCallback(
+    (e: React.DragEvent) => {
+      if (!onAttachImage) return;
+      const types = e.dataTransfer?.types;
+      if (types && !Array.from(types).includes('Files')) return;
+      e.preventDefault();
+      setDropActive(true);
+    },
+    [onAttachImage],
+  );
+  const onDropPanel = React.useCallback(
+    (e: React.DragEvent) => {
+      if (!onAttachImage) return;
+      const files = imagesFrom(e.dataTransfer as unknown as DataTransferLike);
+      setDropActive(false);
+      if (!files.length) return;
+      e.preventDefault();
+      void ingestFiles(files);
+    },
+    [onAttachImage, ingestFiles],
+  );
   // Lets the person STOP a turn mid-flight: while busy the send button becomes a
   // stop button, and clicking it aborts the in-flight askStream (its fetch reader
   // rejects, caught below). One controller per turn.
@@ -723,10 +835,15 @@ export function FriendChat({
         {/* aria-modal only when it is true: a non-modal drawer leaves the rest of
             the page available to assistive tech, which is exactly the point. */}
         <div
-          className="fc-drawer-inner"
+          ref={drawerRef}
+          className={`fc-drawer-inner${dropActive ? ' fc-dropping' : ''}`}
           role="dialog"
           aria-modal={modal ? true : undefined}
           aria-label={headName}
+          onPaste={(e) => { onPasteEvent(e.clipboardData, () => e.preventDefault()); }}
+          onDragOver={onDragOverPanel}
+          onDragLeave={(e) => { if (e.currentTarget === e.target) setDropActive(false); }}
+          onDrop={onDropPanel}
         >
           <header className="fc-head">
             <span className="fc-head-mark">
@@ -837,6 +954,13 @@ export function FriendChat({
                   <span className="fc-jump-arrow" aria-hidden>↓</span> Latest
                 </button>
               )}
+              {/* An upload that failed says so, here, where they are looking. It clears
+                  the moment they try again or start typing. */}
+              {attachError ? (
+                <div className="fc-attach-error" role="status" aria-live="polite">
+                  {attachError}
+                </div>
+              ) : null}
               <form
                 className="fc-compose"
                 onSubmit={(e) => {
@@ -853,18 +977,13 @@ export function FriendChat({
                       ref={fileRef}
                       type="file"
                       accept="image/*"
+                      multiple
                       className="fc-attach-input"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
+                      onChange={(e) => {
+                        const picked = Array.from(e.target.files ?? []);
                         e.currentTarget.value = ''; // let the same file be picked again
-                        if (!file) return;
-                        setAttaching(true);
-                        try {
-                          const url = await onAttachImage(file);
-                          if (url) setInput((prev) => (prev ? prev.trimEnd() + ' ' : '') + url);
-                        } finally {
-                          setAttaching(false);
-                        }
+                        if (!picked.length) return;
+                        void ingestFiles(picked);
                       }}
                     />
                     <button
@@ -873,7 +992,7 @@ export function FriendChat({
                       onClick={() => fileRef.current?.click()}
                       disabled={attaching}
                       aria-label="Attach an image from your device"
-                      title="Attach an image from your device"
+                      title="Attach an image, or just paste or drag one in"
                     >
                       {attaching ? <span className="fc-attach-dot" aria-hidden /> : (
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -913,7 +1032,10 @@ export function FriendChat({
                   className="fc-input"
                   value={input}
                   rows={1}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (attachError) setAttachError('');
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
